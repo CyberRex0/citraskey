@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width">
+        <meta charset="utf-8">
+        <title>3DSskey</title>
+        <link rel="stylesheet" href="/static/css/style.css">
+        <script>
+            window.addEventListener('error', function (e) {
+                alert(e.message);
+                alert(e.filename);
+                alert(e.error);
+            });
+        </script>
+    </head>
+    <body>
+        {% include "app/components/note_form.html" %}
+        <div class="m4">
+            <a href="javascript:location.reload()"><img src="/static/image/reload.png" width="24"/></a>
+            &nbsp;
+            <a href="/notifications"><img src="/static/image/notification.png" width="24"/></a>
+        </div>
+        {% for note in notes %}
+            {% include "app/components/note.html" %}
+        {% endfor %}
+        <script src="/static/js/app.js"></script>
+    </body>
+</html>

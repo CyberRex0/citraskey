@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta name="viewport" content="width=device-width">
+        <meta charset="utf-8">
+        <title>3DSskey | ログイン</title>
+    </head>
+    <body>
+        <h1>ログイン</h1>
+        <br>
+        <div>
+            以下のURLやQRコードにスマートフォンやPCでアクセスして {{ hostname }} の認証を完了してください。<br>
+            {{ auth_url }}<br>
+            <img src="{{ qr_base64 }}" style="width: 180px">
+            <form action="/auth/check" method="POST">
+                {% if not_ready %}
+                    <p style="color:red">まだ認証ができていません。</p>
+                {% endif %}
+                <input type="submit" value="確認">
+            </form>
+        </div>
+    </body>
+</html>

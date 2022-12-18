@@ -1,0 +1,24 @@
+<div style="margin: 4px">
+<form action="/api/post" method="POST" enctype="multipart/form-data">
+    <textarea style="width: 100%" name="text" placeholder="今なにしてる？"></textarea>
+    <select name="visibility">
+        <option value="public">パブリック</option>
+        <option value="home">ホーム</option>
+        <option value="followers">フォロワー限定</option>
+    </select><br>
+    <input type="checkbox" id="nf_localonly" name="localOnly"><label for="nf_localonly">ローカルのみ</label>
+    <input type="checkbox" id="nf_cw"><label for="nf_cw">CW</label>
+    <input type="text" id="cw_input" name="cw" placeholder="CWの説明を入力..." style="display: none; width: 100%;" maxlength="100">
+    <input type="file" name="image" accept="image/*">
+    <input style="width: 100%" type="submit" value="ノート">
+</form>
+</div>
+
+<script>
+    window.addEventListener('load', function () {
+        var nf_cw = document.getElementById('nf_cw');
+        nf_cw.addEventListener('change', function (e) {
+            document.getElementById('cw_input').style.display = e.target.checked ? 'block' : 'none';
+        });
+    });
+</script>

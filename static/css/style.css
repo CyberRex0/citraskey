@@ -1,0 +1,27 @@
+.note {
+    margin-bottom: 8px;
+    padding: 2px;
+    border: 1px solid black;
+    border-radius: 4px;
+    overflow-x: scroll;
+}
+
+.note-quote {
+    border: 1px dashed black !important;
+}
+
+.emoji-in-text {
+    max-width: 16px;
+}
+
+.icon-in-note {
+    max-width: 24px;
+}
+
+.hide {
+    display: none !important;
+}
+
+.m4 {
+    margin: 4px;
+}

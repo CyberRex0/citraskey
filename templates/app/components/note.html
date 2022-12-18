@@ -1,0 +1,41 @@
+{% autoescape false %}
+<div class="note {{ 'note-quote' if option_data and option_data['quote'] }}">
+    <img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"> {{ emoji_convert(note['user']['name'] or note['user']['username'], note['user']['emojis']) }} {{ '<small>がリノート</small>' if note['renote'] and not note['text'] else '' }}
+    <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['emojis']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
+    <p style="display: {{ 'none' if note['cw'] else 'block' }}" id="note-content-{{ note['id'] }}">
+        {{ renderURL(emoji_convert(markdown_render(note['text'] or ''), note['emojis']))[3:-4] }}
+    </p>
+
+    <div>
+    
+    {% for i, file in enumerate(note['files']) %}
+        <a href="{{ make_mediaproxy_url(file['url'], True) }}">添付ファイル {{i+1}}</a>
+    {% endfor %}
+    </div>
+
+    {% if note['renote'] %}
+        {{ render_note_element(note['renote'], {'quote': note['renote'] and note['text']}) }}
+    {% endif %}
+
+    <div>
+        {{ reactions_count_html(note['reactions'], note['emojis']) }}
+    </div>
+    <div>
+        {% if not note['renote'] and note['text'] %}
+        <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}>リノート</button>
+        <button onclick="quote('{{ note['id'] }}')">引用</button>
+        <span style="float: right; font-size: 7pt">{{ note['createdAt'] }}</span>
+        {% endif %}
+    </div>
+    <script type="text/javascript">
+        var imgelm = document.getElementById('imageview_element_{{ note['id'] }}');
+        function imageView_{{ note['id'] }}(e, url) {
+            try {
+                imgelm.src = url;
+            } catch (exc) {
+                alert(exc);
+            }
+        }
+    </script>
+</div>
+{% endautoescape %}

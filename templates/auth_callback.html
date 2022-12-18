@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width">
+        <meta charset="utf-8">
+        <title>3DSskey</title>
+    </head>
+    <body>
+        <h1>認証チェック</h1>
+        <p>
+            スマートフォンなどに表示されているコードを入力してください。<br>
+            <form action="/auth/callback_check" method="POST">
+                <input type="text" name="callback_code" placeholder="コード"><input type="submit" value="確認">
+            </form>
+        </p>
+    </body>
+</html>
