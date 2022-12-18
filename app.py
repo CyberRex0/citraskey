@@ -42,6 +42,8 @@ HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/6
 http_session = requests.Session()
 http_session.headers['User-Agent'] = HTTP_USER_AGENT
 
+SYS_DIRS = ['emoji_cache', 'mediaproxy_cache']
+
 MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL = '20'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ = '2'
 
@@ -59,6 +61,10 @@ NOTIFICATION_TYPES = {
     'followRequestAccepted': 'がフォローリクエストを承認しました',
     'groupInvited': 'からグループ招待されました'
 }
+
+for dir in SYS_DIRS:
+    if not os.path.exists(dir):
+        os.makedirs(dir)
 
 def make_short_link(url: str):
     sid = randomstr(10)

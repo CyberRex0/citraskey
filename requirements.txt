@@ -1,0 +1,6 @@
+Flask
+demoji
+Markdown
+Misskey.py
+qrcode
+requests
