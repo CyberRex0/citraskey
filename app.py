@@ -21,6 +21,7 @@ import demoji
 import json
 from typing import Optional
 import time
+from functools import wraps
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
@@ -63,9 +64,9 @@ NOTIFICATION_TYPES = {
     'groupInvited': 'からグループ招待されました'
 }
 
-for dir in SYS_DIRS:
-    if not os.path.exists(dir):
-        os.makedirs(dir)
+for d in SYS_DIRS:
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 def make_short_link(url: str):
     sid = randomstr(10)
@@ -159,11 +160,30 @@ def renderNotification(n: dict):
 
     return htm
 
-def error_json(error_id: int, reason: Optional[str] = None):
+def error_json(error_id: int, reason: Optional[str] = None, internal: bool = False, status: int = None):
     return make_response(json.dumps({
         'errorId': error_id,
         'reason': reason
-    }), 500)
+    }), status or (500 if internal else 400))
+
+def login_check(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in') or not session.get('id'):
+            return error_json(1002, 'You are not logged in')
+    
+        cur = db.cursor()
+        cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
+        row = cur.fetchone()
+        cur.close()
+
+        if not row:
+            return error_json(1002, 'You are not logged in')
+        
+        return f(*args, **kwargs)
+
+    return decorated_function
+
 
 @app.route('/')
 def root():
@@ -312,6 +332,8 @@ def auth_callback_check():
     cur.close()
     db.commit()
     session['logged_in'] = True
+    session['host'] = row['host']
+    session['misskey_token'] = row['misskey_token']
 
     return redirect('/')
 
@@ -368,26 +390,9 @@ def home_timeline():
     )
 
 @app.route('/notifications', methods=['GET'])
+@login_check
 def notifications():
-    if not session.get('logged_in'):
-        return make_response('!?')
-    
-    if not session.get('id'):
-        session['logged_in'] = False
-        return redirect('/')
-    
-    cur = db.cursor()
-    cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
-        session['logged_in'] = False
-        return redirect('/')
-    
-    #m = Misskey(address=row['host'], i=row['misskey_token'])
-    #notifications = m.notifications()
-    r = http_session.post(f'https://{row["host"]}/api/i/notifications', json={'i': row['misskey_token'], 'limit': 40})
+    r = http_session.post(f'https://{session["host"]}/api/i/notifications', json={'i': session['misskey_token'], 'limit': 40})
     if r.status_code != 200:
         return make_response(f'failed ({r.status_code})', 500)
     
@@ -407,39 +412,24 @@ def notifications():
     )
 
 @app.route('/api/post', methods=['POST'])
+@login_check
 def api_post():
-    if not session.get('logged_in'):
-        return make_response('You are not logged in', 400)
-    
-    if not session.get('id'):
-        session['logged_in'] = False
-        return redirect('/')
-    
     upload_file = request.files.get('image')
     drive_id = None
-
-    cur = db.cursor()
-    cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
-        session['logged_in'] = False
-        return redirect('/')
     
     text = request.form.get('text')
     if not text:
         return make_response('text is required', 400)
 
-    payload = {'i': row['misskey_token'], 'text': text}
+    payload = {'i': session['misskey_token'], 'text': text}
     
     if upload_file:
-        m = Misskey(address=row['host'], i=row['misskey_token'], session=http_session)
+        m = Misskey(address=session['host'], i=session['misskey_token'], session=http_session)
         try:
             f = m.drive_files_create(file=upload_file.stream)
         except:
             traceback.print_exc()
-            return make_response('Upload failed', 400)
+            return make_response('Upload failed', 500)
         payload['fileIds'] = [f['id']]
     
     if request.form.get('localOnly'):
@@ -451,66 +441,46 @@ def api_post():
     if request.form.get('visibility'):
         payload['visibility'] = request.form.get('visibility')
 
-    r = http_session.post(f'https://{row["host"]}/api/notes/create', json=payload)
+    r = http_session.post(f'https://{session["host"]}/api/notes/create', json=payload)
 
     if r.status_code != 200:
-        return make_response(f'Post failed ({r.status_code})', 400)
+        return make_response(f'Post failed ({r.status_code})', 500)
     res = r.json()
 
     return redirect(request.headers['Referer'])
 
 @app.route('/api/renote', methods=['GET'])
+@login_check
 def api_renote():
-    if not session.get('logged_in') or not session.get('id'):
-        return error_json(1002, 'You are not logged in')
-    
-    cur = db.cursor()
-    cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
-        return error_json(1002, 'You are not logged in')
-    
     note_id = request.args.get('noteId')
     if not note_id:
         return error_json(1, 'noteId is required')
     
-    r = http_session.post(f'https://{row["host"]}/api/notes/create', json={'i': row['misskey_token'], 'renoteId': note_id})
+    r = http_session.post(f'https://{session["host"]}/api/notes/create', json={'i': session['misskey_token'], 'renoteId': note_id})
     try:
         res = r.json()
     except:
-        return error_json(1, 'Post failed (API JSON Decode Error)')
+        return error_json(1, 'Post failed (API JSON Decode Error)', internal=True)
     
     if r.status_code != 200:
         if r.status_code == 429:
-            return error_json(1004, 'Too many requests')
+            return error_json(1004, 'Too many requests', status=429)
         if res.get('error'):
             if 'No such' in res['error']['message']:
                 return error_json(1000)
-            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}')
-        return error_json(1, f'Post failed ({r.status_code})')
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+        return error_json(1, f'Post failed ({r.status_code})', internal=True)
     
     return make_response('', 200)
 
 @app.route('/api/undo_renote', methods=['GET'])
+@login_check
 def api_undo_renote():
-    if not session.get('logged_in') or not session.get('id'):
-        return error_json(1002, 'You are not logged in')
-    
-    cur = db.cursor()
-    cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
-        return error_json(1002, 'You are not logged in')
-    
     note_id = request.args.get('noteId')
     if not note_id:
         return error_json(1, 'noteId is required', 400)
     
-    r = http_session.post(f'https://{row["host"]}/api/notes/unrenote', json={'i': row['misskey_token'], 'noteId': note_id})
+    r = http_session.post(f'https://{session["host"]}/api/notes/unrenote', json={'i': session['misskey_token'], 'noteId': note_id})
     try:
         res = r.json()
     except:
@@ -520,28 +490,18 @@ def api_undo_renote():
     
     if r.status_code != 200:
         if r.status_code == 429:
-            return error_json(1004, 'Too many requests')
+            return error_json(1004, 'Too many requests', status=429)
         if res.get('error'):
             if 'No such' in res['error']['message']:
                 return error_json(1000)
-            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}')
-        return error_json(1, f'Post failed ({r.status_code})')
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+        return error_json(1, f'Post failed ({r.status_code})', internal=True)
     
     return make_response('', 200)
 
 @app.route('/api/quote')
+@login_check
 def quote():
-    if not session.get('logged_in') or not session.get('id'):
-        return error_json(1002, 'You are not logged in')
-    
-    cur = db.cursor()
-    cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
-        return error_json(1002, 'You are not logged in')
-    
     note_id = request.args.get('noteId')
     if not note_id:
         return error_json(1, 'noteId is required')
@@ -550,36 +510,26 @@ def quote():
     if not text:
         return error_json(1, 'text is required')
     
-    r = http_session.post(f'https://{row["host"]}/api/notes/create', json={'i': row['misskey_token'], 'text': text, 'renoteId': note_id})
+    r = http_session.post(f'https://{session["host"]}/api/notes/create', json={'i': session['misskey_token'], 'text': text, 'renoteId': note_id})
     try:
         res = r.json()
     except:
-        return error_json(1, 'Post failed (API JSON Decode Error)')
+        return error_json(1, 'Post failed (API JSON Decode Error)', internal=True)
     
     if r.status_code != 200:
         if r.status_code == 429:
-            return error_json(1004, 'Too many requests')
+            return error_json(1004, 'Too many requests', status=429)
         if res.get('error'):
             if 'No such' in res['error']['message']:
                 return error_json(1000)
-            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}')
-        return error_json(1, f'Post failed ({r.status_code})')
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+        return error_json(1, f'Post failed ({r.status_code})', internal=True)
     
     return make_response('', 200)
 
 @app.route('/api/reaction', methods=['GET'])
+@login_check
 def api_reaction():
-    if not session.get('logged_in') or not session.get('id'):
-        return error_json(1002, 'You are not logged in')
-    
-    cur = db.cursor()
-    cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
-    row = cur.fetchone()
-    cur.close()
-
-    if not row:
-        return error_json(1002, 'You are not logged in')
-    
     note_id = request.args.get('noteId')
     if not note_id:
         return error_json(1, 'noteId is required')
@@ -598,45 +548,45 @@ def api_reaction():
         except:
             return error_json(1, 'Invalid unicode character')
     
-    r = http_session.post(f'https://{row["host"]}/api/notes/show', json={'i': row['misskey_token'], 'noteId': note_id})
+    r = http_session.post(f'https://{session["host"]}/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
     if r.status_code != 200:
         try:
             res = r.json()
             if res.get('error'):
                 if 'No such' in res['error']['message']:
                     return error_json(1000)
-                return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}')
+                return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
         except:
-            return error_json(1, 'Reaction failed (Prefetch Error, JSON Decode Error)')
+            return error_json(1, 'Reaction failed (Prefetch Error, JSON Decode Error)', internal=True)
     else:
         try:
             res = r.json()
         except:
-            return error_json(1, 'Reaction failed (Prefetch, JSON Decode Error)')
+            return error_json(1, 'Reaction failed (Prefetch, JSON Decode Error)', internal=True)
         if res.get('myReaction'):
-            http_session.post(f'https://{row["host"]}/api/notes/reactions/delete', json={'i': row['misskey_token'], 'noteId': note_id})
+            http_session.post(f'https://{session["host"]}/api/notes/reactions/delete', json={'i': session['misskey_token'], 'noteId': note_id})
             time.sleep(0.3)
 
     if reaction:
-        r = http_session.post(f'https://{row["host"]}/api/notes/reactions/create', json={'i': row['misskey_token'], 'noteId': note_id, 'reaction': reaction})
+        r = http_session.post(f'https://{session["host"]}/api/notes/reactions/create', json={'i': session['misskey_token'], 'noteId': note_id, 'reaction': reaction})
         if r.status_code >= 400:
             try:
                 res = r.json()
                 if res.get('error'):
                     if 'No such' in res['error']['message']:
                         return error_json(1000)
-                    return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}')
+                    return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
             except:
-                return error_json(1, 'Reaction failed (Reaction, JSON Decode Error)')
+                return error_json(1, 'Reaction failed (Reaction, JSON Decode Error)', internal=True)
 
-    r = http_session.post(f'https://{row["host"]}/api/notes/show', json={'i': row['misskey_token'], 'noteId': note_id})
+    r = http_session.post(f'https://{session["host"]}/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
     if r.status_code != 200:
-        return error_json(1, 'Reaction failed (After-Fetch Error)')
+        return error_json(1, 'Reaction failed (After-Fetch Error)', internal=True)
 
     try:
         res = r.json()
     except:
-        return error_json(1, 'Reaction failed (After-Fetch, JSON Decode Error)')
+        return error_json(1, 'Reaction failed (After-Fetch, JSON Decode Error)', internal=True)
     
     return reactions_count_html(res['id'], res['reactions'], res['emojis'], res.get('myReaction'))
 
