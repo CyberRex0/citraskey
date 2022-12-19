@@ -17,11 +17,11 @@
         {{ render_note_element(note['renote'], {'quote': note['renote'] and note['text']}) }}
     {% endif %}
 
-    <div>
-        {{ reactions_count_html(note['reactions'], note['emojis']) }}
+    <div id="{{ note['id'] }}-reactions">
+        {{ reactions_count_html(note['id'], note['reactions'], note['emojis'], note.get('myReaction')) }}
     </div>
     <div>
-        {% if not note['renote'] and note['text'] %}
+        {% if not note['renote'] %}
         <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}>リノート</button>
         <button onclick="quote('{{ note['id'] }}')">引用</button>
         <span style="float: right; font-size: 7pt">{{ note['createdAt'] }}</span>

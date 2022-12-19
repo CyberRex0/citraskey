@@ -4,3 +4,4 @@ Markdown
 Misskey.py
 qrcode
 requests
+Pillow

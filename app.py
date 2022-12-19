@@ -20,6 +20,7 @@ import traceback
 import demoji
 import json
 from typing import Optional
+import time
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
@@ -97,21 +98,23 @@ def emoji_convert(tx: str, emojis: List[dict]):
 
     return tx
 
-def reactions_count_html(reactions: dict, emojis: List[dict]):
+def reactions_count_html(note_id: str, reactions: dict, emojis: List[dict], my_reaction: Optional[str]):
     if not reactions:
         return ''
-    emojis = {f':{e["name"]}:': e['url'] for e in emojis}
+    emojis = {f':{e["name"]}:': [e['url'], e["name"]] for e in emojis}
     rhtm = []
     for k in reactions.keys():
+        uniqId = randomstr(8)
+        is_local_emoji = k.endswith('@.:')
         try:
-            emj = f'<img src="{make_mediaproxy_url(emojis[k])}" class="emoji-in-text">'
+            emj = f'<img src="{make_mediaproxy_url(emojis[k][0])}" class="emoji-in-text {"reactive-emoji" if is_local_emoji else ""} note-reaction-button-{note_id}" data-note-id="{note_id}" data-reaction-content="{emojis[k][1]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
         except:
             emd = demoji.findall(k)
             if emd:
-                emj = f'<img src="{make_emoji2image_url(k)}" class="emoji-in-text">'
+                emj = f'<img src="{make_emoji2image_url(k)}" class="emoji-in-text reactive-emoji note-reaction-button-{note_id}" data-note-id="{note_id}" data-reaction-content="{hex(ord(k))[2:]}" data-reaction-type="unicode" data-reaction-element-root="{uniqId}" />'
             else:
                 emj = k
-        rhtm.append(f'{emj}: {reactions[k]}')
+        rhtm.append(f'<span id="note-reaction-element-root-{uniqId}" class="{"note-reaction-selected" if k == my_reaction else ""}">{emj}: {reactions[k]}</span>')
     
     html = '&nbsp;'.join(rhtm)
     return html
@@ -169,6 +172,16 @@ def root():
     else:
         return render_template('index.html')
 
+@app.route('/logout')
+def logout():
+    if session.get('id'):
+        cur = db.cursor()
+        cur.execute('DELETE FROM users WHERE id = ?', (session['id'],))
+        cur.close()
+        db.commit()
+    session.clear()
+    return redirect('/')
+
 @app.route('/auth/start', methods=['POST'])
 def auth_start():
     hostname = request.form.get('hostname')
@@ -182,7 +195,15 @@ def auth_start():
 
     urlargs = urllib.parse.urlencode({
         'name': '3DSskey',
-        'permission': 'read:account,read:drive,write:drive,write:notes,read:notifications,read:reactions:write:reactions',
+        'permission': ','.join([
+            'read:account',
+            'read:drive',
+            'write:drive',
+            'write:notes',
+            'read:notifications',
+            'read:reactions',
+            'write:reactions'
+        ]),
         'callback': callback_url
     })
     auth_url = f'http://{hostname}/miauth/{mi_sesid}?{urlargs}'
@@ -545,6 +566,79 @@ def quote():
         return error_json(1, f'Post failed ({r.status_code})')
     
     return make_response('', 200)
+
+@app.route('/api/reaction', methods=['GET'])
+def api_reaction():
+    if not session.get('logged_in') or not session.get('id'):
+        return error_json(1002, 'You are not logged in')
+    
+    cur = db.cursor()
+    cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
+    row = cur.fetchone()
+    cur.close()
+
+    if not row:
+        return error_json(1002, 'You are not logged in')
+    
+    note_id = request.args.get('noteId')
+    if not note_id:
+        return error_json(1, 'noteId is required')
+    
+    reaction = request.args.get('reaction')
+    #if not reaction:
+    #    return error_json(1, 'reaction is required')
+    
+    reaction_type = request.args.get('type')
+    if not reaction_type:
+        return error_json(1, 'type is required')
+    
+    if reaction and reaction_type == 'unicode':
+        try:
+            reaction = chr(int('0x' + reaction, 16))
+        except:
+            return error_json(1, 'Invalid unicode character')
+    
+    r = http_session.post(f'https://{row["host"]}/api/notes/show', json={'i': row['misskey_token'], 'noteId': note_id})
+    if r.status_code != 200:
+        try:
+            res = r.json()
+            if res.get('error'):
+                if 'No such' in res['error']['message']:
+                    return error_json(1000)
+                return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}')
+        except:
+            return error_json(1, 'Reaction failed (Prefetch Error, JSON Decode Error)')
+    else:
+        try:
+            res = r.json()
+        except:
+            return error_json(1, 'Reaction failed (Prefetch, JSON Decode Error)')
+        if res.get('myReaction'):
+            http_session.post(f'https://{row["host"]}/api/notes/reactions/delete', json={'i': row['misskey_token'], 'noteId': note_id})
+            time.sleep(0.3)
+
+    if reaction:
+        r = http_session.post(f'https://{row["host"]}/api/notes/reactions/create', json={'i': row['misskey_token'], 'noteId': note_id, 'reaction': reaction})
+        if r.status_code >= 400:
+            try:
+                res = r.json()
+                if res.get('error'):
+                    if 'No such' in res['error']['message']:
+                        return error_json(1000)
+                    return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}')
+            except:
+                return error_json(1, 'Reaction failed (Reaction, JSON Decode Error)')
+
+    r = http_session.post(f'https://{row["host"]}/api/notes/show', json={'i': row['misskey_token'], 'noteId': note_id})
+    if r.status_code != 200:
+        return error_json(1, 'Reaction failed (After-Fetch Error)')
+
+    try:
+        res = r.json()
+    except:
+        return error_json(1, 'Reaction failed (After-Fetch, JSON Decode Error)')
+    
+    return reactions_count_html(res['id'], res['reactions'], res['emojis'], res.get('myReaction'))
 
 @app.route('/mediaproxy/<path:path>')
 def mediaproxy(path: str, hq: bool = False):

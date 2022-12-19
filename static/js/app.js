@@ -105,3 +105,54 @@ function quote(id) {
         });
     }
 }
+
+var emojiButtonHandler = function (e) {
+    var noteId = e.target.getAttribute('data-note-id');
+    var reaction = e.target.getAttribute('data-reaction-content');
+    var reactionType = e.target.getAttribute('data-reaction-type');
+    if (reactionType == 'custom') {
+        reaction = ':' + reaction + ':';
+    }
+    var reactionElRootId = e.target.getAttribute('data-reaction-element-root');
+    var reactionRootEl = document.getElementById('note-reaction-element-root-' + reactionElRootId);
+    //alert('noteId: ' + noteId + '\n' + 'reaction: ' + reaction + '\n' + 'reactionType: ' + reactionType);
+    if (reactionRootEl.className.indexOf('note-reaction-selected') === -1) {
+        api_request('/api/reaction?noteId=' + noteId + '&reaction=' + encodeURI(reaction) + '&type=' + reactionType, function (status, body) {
+            if (status == 200) {
+                document.getElementById(noteId + '-reactions').innerHTML = body;
+                // DOM解析を待つ
+                setInterval(function () { registerEmojiButtonHandlerByNoteId(noteId) }, 500);
+            }
+        });
+    } else {
+        api_request('/api/reaction?noteId=' + noteId + '&reaction=&type=none', function (status, body) {
+            if (status == 200) {
+                document.getElementById(noteId + '-reactions').innerHTML = body;
+                // DOM解析を待つ
+                setInterval(function () { registerEmojiButtonHandlerByNoteId(noteId) }, 500);
+            }
+        });
+    }
+}
+
+function registerEmojiButtonHandler() {
+    var customEmojiBtns = document.getElementsByClassName('reactive-emoji');
+    for (var i = 0; i < customEmojiBtns.length; i++) {
+        customEmojiBtns[i].onclick = emojiButtonHandler;
+    }
+}
+
+function registerEmojiButtonHandlerByNoteId(noteId) {
+    var emojiBtns = document.getElementsByClassName('note-reaction-button-' + noteId);
+    for (var i = 0; i < emojiBtns.length; i++) {
+        emojiBtns[i].onclick = emojiButtonHandler;
+    }
+}
+
+window.addEventListener('load', function () {
+    if (!document.getElementsByClassName) {
+        alert('getElementsByClassName is not supported.');
+        return;
+    }
+    registerEmojiButtonHandler();
+});
