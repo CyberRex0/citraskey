@@ -24,7 +24,7 @@
         {% if not note['renote'] %}
         <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}>リノート</button>
         <button onclick="quote('{{ note['id'] }}')">引用</button>
-        <span style="float: right; font-size: 7pt">{{ note['createdAt'] }}</span>
+        <span style="float: right; font-size: 7pt">{{ format_datetime(note['createdAt']) }}</span>
         {% endif %}
     </div>
     <script type="text/javascript">

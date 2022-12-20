@@ -1,17 +1,8 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <meta name="viewport" content="width=device-width">
-        <meta charset="utf-8">
+        {% include "app/components/head.html" %}
         <title>3DSskey</title>
-        <link rel="stylesheet" href="/static/css/style.css">
-        <script>
-            window.addEventListener('error', function (e) {
-                alert(e.message);
-                alert(e.filename);
-                alert(e.error);
-            });
-        </script>
     </head>
     <body>
         {% include "app/components/note_form.html" %}
@@ -20,10 +11,11 @@
             &nbsp;
             <a href="/notifications"><img src="/static/image/notification.png" width="24"/></a>
         </div>
+        {% autoescape false %}
         {% for note in notes %}
-            {% include "app/components/note.html" %}
+            {{ render_note_element(note, {}) }}
         {% endfor %}
-        <div id="test1" data-hahaha="yes"></div>
-        <script src="/static/js/app.js"></script>
+        {% endautoescape %}
+        {% include "app/components/footer.html" %}
     </body>
 </html>

@@ -23,6 +23,7 @@ import json
 from typing import Optional
 import time
 from functools import wraps
+import datetime
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
@@ -53,7 +54,7 @@ SYS_DIRS = ['emoji_cache', 'mediaproxy_cache']
 MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL = '20'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ = '2'
 
-URL_REGEX = re.compile(r'(https?://[\w!?/+\-_~;.,*&@#$%()\'[\]]+)')
+URL_REGEX = re.compile(r'(https?://[\w!?/+\-_~;.,*&@#$%()\'=:\+[\]]+)')
 
 NOTIFICATION_TYPES = {
     'follow': 'にフォローされました',
@@ -135,7 +136,8 @@ def render_note_element(note: dict, option_data: dict):
         enumerate=enumerate,
         render_note_element=render_note_element,
         make_mediaproxy_url=make_mediaproxy_url,
-        renderURL=renderURL
+        renderURL=renderURL,
+        format_datetime=format_datetime
     )
 
 def renderURL(src):
@@ -144,7 +146,7 @@ def renderURL(src):
         src = src.replace(url, '<a href="' + url + '" target="_blank">' + url + '</a>')
     return src
 
-def renderNotification(n: dict):
+def render_notification(n: dict):
     ntype = n['type']
     if ntype == 'app':
         return 'この通知には対応していません'
@@ -187,6 +189,12 @@ def login_check(f):
         return f(*args, **kwargs)
 
     return decorated_function
+
+def format_datetime(dtstr: str, to_jst: bool = True):
+    dt = datetime.datetime.strptime(dtstr, '%Y-%m-%dT%H:%M:%S.%fZ')
+    if to_jst:
+        dt = dt + datetime.timedelta(hours=9)
+    return dt.strftime('%Y/%m/%d %H:%M:%S')
 
 
 @app.route('/')
@@ -384,13 +392,7 @@ def home_timeline():
     return render_template(
         'app/home.html',
         notes=notes,
-        markdown_render=markdown.markdown,
-        emoji_convert=emoji_convert,
-        reactions_count_html=reactions_count_html,
-        enumerate=enumerate,
-        render_note_element=render_note_element,
-        make_mediaproxy_url=make_mediaproxy_url,
-        renderURL=renderURL
+        render_note_element=render_note_element
     )
 
 @app.route('/notifications', methods=['GET'])
@@ -405,14 +407,7 @@ def notifications():
     return render_template(
         'app/notifications.html',
         notifications=notifications,
-        markdown_render=markdown.markdown,
-        emoji_convert=emoji_convert,
-        reactions_count_html=reactions_count_html,
-        enumerate=enumerate,
-        render_note_element=render_note_element,
-        make_mediaproxy_url=make_mediaproxy_url,
-        renderURL=renderURL,
-        renderNotification=renderNotification
+        render_notification=render_notification
     )
 
 @app.route('/api/post', methods=['POST'])
