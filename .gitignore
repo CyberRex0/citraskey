@@ -133,3 +133,4 @@ dmypy.json
 env/
 .DS_Store
 
+flask_session/

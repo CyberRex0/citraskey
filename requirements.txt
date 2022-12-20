@@ -5,3 +5,4 @@ Misskey.py
 qrcode
 requests
 Pillow
+flask-session

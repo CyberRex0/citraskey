@@ -4,6 +4,7 @@ import os
 import re
 from typing import List
 from flask import Flask, make_response, redirect, render_template, send_file, session, request
+from flask_session import Session
 import sqlite3
 import uuid
 import random
@@ -38,6 +39,9 @@ db.commit()
 
 app = Flask(__name__, static_url_path='/static')
 app.secret_key = b'SECRET'
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SECRET_KEY'] = 'SECRET'
+Session(app)
 
 HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15 3DSskey/0.0.1'
 
