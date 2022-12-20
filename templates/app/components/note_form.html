@@ -1,7 +1,9 @@
-<div style="margin: 4px">
+<div style="margin: 4px" class="note-form">
 <form action="/api/post" method="POST" enctype="multipart/form-data">
-    <textarea style="width: 100%" name="text" placeholder="今なにしてる？"></textarea>
-    <select name="visibility">
+    <div id="note-form-quote-head" style="display: none">[引用ノートを編集中] <input type="button" id="note-form-quote-cancel" value="キャンセル"></div>
+    <div id="note-form-reply-head" style="display: none">[返信を編集中] <input type="button" id="note-form-reply-cancel" value="キャンセル"></div>
+    <textarea id="note-form-input-text" style="width: 100%" name="text" placeholder="今なにしてる？"></textarea>
+    <select id="note-form-select-visibility" name="visibility">
         <option value="public">パブリック</option>
         <option value="home">ホーム</option>
         <option value="followers">フォロワー限定</option>
@@ -10,8 +12,13 @@
     <input type="checkbox" id="nf_cw"><label for="nf_cw">CW</label>
     <input type="text" id="cw_input" name="cw" placeholder="CWの説明を入力..." style="display: none; width: 100%;" maxlength="100">
     <input type="file" name="image" accept="image/*">
-    <input style="width: 100%" type="submit" value="ノート">
+    <input style="width: 100%" id="note-form-submit" type="submit" value="ノート">
+    <input type="hidden" id="note-form-note-id" name="renoteId" value="">
+    <input type="hidden" id="note-form-reply-id" name="replyId" value="">
 </form>
+<div id="note-form-wait-screen">
+    <center style="margin: 0 auto;">タイムラインを読み込んでいます..</center>
+</div>
 </div>
 
 <script>

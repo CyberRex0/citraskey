@@ -66,8 +66,11 @@ NOTIFICATION_TYPES = {
     'pollVote': 'が投票しました',
     'receiveFollowRequest': 'からフォローリクエストが届きました',
     'followRequestAccepted': 'がフォローリクエストを承認しました',
-    'groupInvited': 'からグループ招待されました'
+    'groupInvited': 'からグループ招待されました',
+    'pollEnded': 'の投票が終了しました'
 }
+
+PRESET_REACTIONS = ['👍', '❤️', '😆', '🤔', '🎉', '💢', '😥', '😇', '🥴', '🍮', '🤯']
 
 for d in SYS_DIRS:
     if not os.path.exists(d):
@@ -104,6 +107,9 @@ def emoji_convert(tx: str, emojis: List[dict]):
 
     return tx
 
+def unicode_emoji_hex(e):
+    return hex(ord(e[0]))[2:]
+
 def reactions_count_html(note_id: str, reactions: dict, emojis: List[dict], my_reaction: Optional[str]):
     if not reactions:
         return ''
@@ -111,16 +117,19 @@ def reactions_count_html(note_id: str, reactions: dict, emojis: List[dict], my_r
     rhtm = []
     for k in reactions.keys():
         uniqId = randomstr(8)
+        uniqId2 = randomstr(8)
         is_local_emoji = k.endswith('@.:')
+        is_unicode_emoji = False
         try:
-            emj = f'<img src="{make_mediaproxy_url(emojis[k][0])}" class="emoji-in-text {"reactive-emoji" if is_local_emoji else ""} note-reaction-button-{note_id}" data-note-id="{note_id}" data-reaction-content="{emojis[k][1]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
+            emj = f'<img src="{make_mediaproxy_url(emojis[k][0])}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{emojis[k][1]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
         except:
             emd = demoji.findall(k)
             if emd:
-                emj = f'<img src="{make_emoji2image_url(k)}" class="emoji-in-text reactive-emoji note-reaction-button-{note_id}" data-note-id="{note_id}" data-reaction-content="{hex(ord(k))[2:]}" data-reaction-type="unicode" data-reaction-element-root="{uniqId}" />'
+                is_unicode_emoji = True
+                emj = f'<img src="{make_emoji2image_url(k)}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{unicode_emoji_hex(k)}" data-reaction-type="unicode" data-reaction-element-root="{uniqId}" />'
             else:
                 emj = k
-        rhtm.append(f'<span id="note-reaction-element-root-{uniqId}" class="{"note-reaction-selected" if k == my_reaction else ""}">{emj}: {reactions[k]}</span>')
+        rhtm.append(f'<span id="note-reaction-element-root-{uniqId}" class="note-reaction-button-{note_id} {"note-reaction-selected" if k == my_reaction else ""} {"reactive-emoji note-reaction-available" if is_local_emoji or is_unicode_emoji else ""}" data-reaction-element-id="{uniqId2}">{emj}: {reactions[k]}</span>')
     
     html = '&nbsp;'.join(rhtm)
     return html
@@ -137,7 +146,10 @@ def render_note_element(note: dict, option_data: dict):
         render_note_element=render_note_element,
         make_mediaproxy_url=make_mediaproxy_url,
         renderURL=renderURL,
-        format_datetime=format_datetime
+        format_datetime=format_datetime,
+        make_emoji2image_url=make_emoji2image_url,
+        unicode_emoji_hex=unicode_emoji_hex,
+        PRESET_REACTIONS=PRESET_REACTIONS
     )
 
 def renderURL(src):
@@ -156,7 +168,18 @@ def render_notification(n: dict):
     if ntype == 'reaction':
         ntypestring = emoji_convert(n['reaction'], n['note']['emojis'])
 
-    htm = f'<img src="{make_mediaproxy_url(n["user"]["avatarUrl"])}" class="icon-in-note"> {emoji_convert(n["user"]["name"] or n["user"]["username"], n["user"]["emojis"])} さん{ntypestring}<br>'
+    if ntype != 'pollEnded':
+        user_avatar_url = n["user"]["avatarUrl"]
+        user_name = n["user"]["name"]
+        user_acct_name = n["user"]["username"]
+        user_name_emojis = n["user"]["emojis"]
+        htm = f'<img src="{make_mediaproxy_url(user_avatar_url)}" class="icon-in-note"> {emoji_convert(user_name or user_acct_name, user_name_emojis)} さん{ntypestring}<br>'
+    else:
+        #user_avatar_url = n["note"]["user"]["avatarUrl"]
+        #user_name = n["note"]["user"]["name"]
+        #user_acct_name = n["note"]["user"]["username"]
+        #user_name_emojis = n["note"]["user"]["emojis"]
+        htm = 'アンケートの結果が出ました<br>'
 
     if n.get('note'):
         if ntype != 'renote':
@@ -419,8 +442,18 @@ def api_post():
     text = request.form.get('text')
     if not text:
         return make_response('text is required', 400)
+    
+    renote_id = request.form.get('renoteId')
+    reply_id = request.form.get('replyId')
+    if renote_id and reply_id:
+        return make_response('renoteId and replyId cannot be used together', 400)
 
     payload = {'i': session['misskey_token'], 'text': text}
+
+    if renote_id:
+        payload['renoteId'] = renote_id
+    if reply_id:
+        payload['replyId'] = reply_id
     
     if upload_file:
         m = Misskey(address=session['host'], i=session['misskey_token'], session=http_session)
@@ -498,34 +531,6 @@ def api_undo_renote():
     
     return make_response('', 200)
 
-@app.route('/api/quote')
-@login_check
-def quote():
-    note_id = request.args.get('noteId')
-    if not note_id:
-        return error_json(1, 'noteId is required')
-    
-    text = request.args.get('text')
-    if not text:
-        return error_json(1, 'text is required')
-    
-    r = http_session.post(f'https://{session["host"]}/api/notes/create', json={'i': session['misskey_token'], 'text': text, 'renoteId': note_id})
-    try:
-        res = r.json()
-    except:
-        return error_json(1, 'Post failed (API JSON Decode Error)', internal=True)
-    
-    if r.status_code != 200:
-        if r.status_code == 429:
-            return error_json(1004, 'Too many requests', status=429)
-        if res.get('error'):
-            if 'No such' in res['error']['message']:
-                return error_json(1000)
-            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
-        return error_json(1, f'Post failed ({r.status_code})', internal=True)
-    
-    return make_response('', 200)
-
 @app.route('/api/reaction', methods=['GET'])
 @login_check
 def api_reaction():
@@ -588,6 +593,28 @@ def api_reaction():
         return error_json(1, 'Reaction failed (After-Fetch, JSON Decode Error)', internal=True)
     
     return reactions_count_html(res['id'], res['reactions'], res['emojis'], res.get('myReaction'))
+
+@app.route('/notes/<string:note_id>/')
+@login_check
+def note_detail(note_id: str):
+    r = http_session.post(f'https://{session["host"]}/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
+    if r.status_code != 200:
+        try:
+            res = r.json()
+            if res.get('error'):
+                if 'No such' in res['error']['message']:
+                    return make_response('ノートが削除されているか、存在しません。', 404)
+                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+        except:
+            return make_response('Fetch note failed (JSON Decode Error)', 500)
+    
+    try:
+        note = r.json()
+    except:
+        return make_response('Read note failed (JSON Decode Error)', 500)
+
+    return render_template('app/note_detail.html', note=note, render_note_element=render_note_element)
+
 
 @app.route('/mediaproxy/<path:path>')
 def mediaproxy(path: str, hq: bool = False):

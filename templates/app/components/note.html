@@ -1,5 +1,5 @@
 {% autoescape false %}
-<div class="note {{ 'note-quote' if option_data and option_data['quote'] }}">
+<div class="note {{ 'note-quote' if option_data and option_data['quote'] }}" id="note-{{ note['id'] }}">
     <img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"> {{ emoji_convert(note['user']['name'] or note['user']['username'], note['user']['emojis']) }} {{ '<small>がリノート</small>' if note['renote'] and not note['text'] else '' }}
     <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['emojis']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
     <p style="display: {{ 'none' if note['cw'] else 'block' }}" id="note-content-{{ note['id'] }}">
@@ -22,10 +22,23 @@
     </div>
     <div>
         {% if not note['renote'] %}
-        <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}>リノート</button>
-        <button onclick="quote('{{ note['id'] }}')">引用</button>
-        <span style="float: right; font-size: 7pt">{{ format_datetime(note['createdAt']) }}</span>
-        {% endif %}
+        <button onclick="reply('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})">{{ note['repliesCount'] }} 返信</button>
+        <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}> {{ note['renoteCount'] }} リノート</button>
+        <button onclick="quote('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}>引用</button>
+        <button onclick="reaction('{{ note['id'] }}')">絵文字</button>
+        <br>
+        <div style="float: right; font-size: 7pt;">
+            {% if note['reply'] %}
+            <span><a href="/notes/{{ note['replyId'] }}">返信元を見る</a></span>
+            {% endif %}
+            <span><a href="/notes/{{ note['id'] }}">{{ format_datetime(note['createdAt']) }}</a></span>
+            {% endif %}
+        </div>
+        <div id="note-reaction-picker-{{ note['id'] }}" style="display: none">
+            {% for emoji in PRESET_REACTIONS %}
+                <span><img class="emoji-in-text note-reaction-available note-reaction-preset-{{ note['id'] }}" src="{{ make_emoji2image_url(emoji) }}" data-note-id="{{ note['id'] }}" data-reaction="{{ unicode_emoji_hex(emoji) }}"></span>
+            {% endfor %}
+        </div>
     </div>
     <script type="text/javascript">
         var imgelm = document.getElementById('imageview_element_{{ note['id'] }}');

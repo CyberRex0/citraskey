@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>3DSskey | {{ note['user']['name'] }} さんの投稿</title>
+    </head>
+    <body>
+        <p>
+            <a href="/">ホーム</a> | <a href="javascript:history.back()">←戻る</a>
+        </p>
+        {% autoescape false %}
+            {{ render_note_element(note, {}) }}
+        {% endautoescape %}
+        {% include "app/components/footer.html" %}
+    </body>
+</html>
