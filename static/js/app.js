@@ -143,11 +143,39 @@ function reply(id, visibility, localOnly) {
 function reaction(noteId) {
     var pickerEl = document.getElementById('note-reaction-picker-' + noteId);
     pickerEl.style.display = (pickerEl.style.display=='none') ? 'block' : 'none';
+    var pickerContainerEl = document.getElementById('note-reaction-picker-container-' + noteId);
+    pickerContainerEl.style.display = 'none';
+    var presetPickerContainerEl = document.getElementById('note-reaction-picker-container-preset-' + noteId);
+    presetPickerContainerEl.style.display = 'block';
 
-    var presetReactionButtons = document.getElementsByClassName('note-reaction-preset-' + noteId);
-    for (var i = 0; i < presetReactionButtons.length; i++) {
-        presetReactionButtons[i].onclick = presetEmojiButtonHandler;
+    registerPickerReactionHandlerById(noteId);
+
+    var searchBox = document.getElementById('note-reaction-picker-searchbox-' + noteId);
+    var searchButton = document.getElementById('note-reaction-picker-searchbutton-' + noteId);
+
+    searchButton.onclick = function (e) {
+        var value = searchBox.value.trim();
+        if (value) {
+            api_request('/api/reaction_search?noteId=' + noteId + '&q=' + encodeURI(value), function (status, body) {
+                if (status == 200) {
+                    presetPickerContainerEl.style.display = 'none';
+                    pickerContainerEl.style.display = 'block';
+                    pickerContainerEl.innerHTML = body;
+                    setInterval(function () { registerPickerReactionHandlerById(noteId) }, 500);
+                }
+            });
+        }
     }
+
+}
+
+function fetchNote(note_id) {
+    api_request('/api/note_fetch?noteId=' + note_id, function (status, body) {
+        if (status == 200) {
+            var note = JSON.parse(body);
+            return note;
+        }
+    });
 }
 
 function scrollToElement(el) {
@@ -192,11 +220,12 @@ var emojiButtonHandler = function (e) {
     }
 }
 
-var presetEmojiButtonHandler = function (e) {
+var emojiPickerButtonHandler = function (e) {
     var noteId = e.target.getAttribute('data-note-id');
-    var reaction = e.target.getAttribute('data-reaction');
+    var reaction = e.target.getAttribute('data-reaction-content');
+    var reaction_type = e.target.getAttribute('data-reaction-type');
 
-    api_request('/api/reaction?noteId=' + noteId + '&reaction=' + encodeURI(reaction) + '&type=unicode', function (status, body) {
+    api_request('/api/reaction?noteId=' + noteId + '&reaction=' + encodeURI(reaction) + '&type=' + reaction_type, function (status, body) {
         if (status == 200) {
             document.getElementById(noteId + '-reactions').innerHTML = body;
             document.getElementById('note-reaction-picker-' + noteId).style.display = 'none';
@@ -204,6 +233,13 @@ var presetEmojiButtonHandler = function (e) {
             setInterval(function () { registerEmojiButtonHandlerByNoteId(noteId) }, 500);
         }
     });
+}
+
+function registerPickerReactionHandlerById(noteId) {
+    var pickerReactionButtons = document.getElementsByClassName('note-reaction-picker-child-' + noteId);
+    for (var i = 0; i < pickerReactionButtons.length; i++) {
+        pickerReactionButtons[i].onclick = emojiPickerButtonHandler;
+    }
 }
 
 function registerEmojiButtonHandler() {

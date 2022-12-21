@@ -89,9 +89,9 @@ def make_short_link(url: str):
     cur.close()
     return sid
 
-def make_mediaproxy_url(target: str, hq: bool = False):
+def make_mediaproxy_url(target: str, hq: bool = False, jpeg: bool = False):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
-    return f'/mediaproxy{"_hq" if hq else ""}/{b64code}'
+    return f'/mediaproxy{"_hq" if hq else ""}{"_jpeg" if jpeg else ""}/{b64code}'
 
 def make_emoji2image_url(target: str):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
@@ -134,6 +134,24 @@ def reactions_count_html(note_id: str, reactions: dict, emojis: List[dict], my_r
     html = '&nbsp;'.join(rhtm)
     return html
 
+def render_reaction_picker_element(note_id: str, reactions: List[dict]):
+    reactionEls = []
+    for r in reactions:
+        reactionEls.append(f'<span><img src="{make_mediaproxy_url(r["url"], jpeg=True)}" class="emoji-in-text note-reaction-available note-reaction-picker-child-{note_id}" data-note-id="{note_id}" data-reaction-content=":{r["name"]}:" data-reaction-type="custom"></span>')
+    return ''.join(reactionEls)
+
+def cleantext(text: str):
+    return text
+    #return re.sub(r'^<p>(.*)</p>$', '\1', text)
+
+def convert_tag(text: str):
+    # inline text
+
+    return re.sub(r'(^|\s)#(\w+)', r'\1<a href="/search?tag=\2">#\2</a>', text)
+
+def mention2link(text: str):
+    return re.sub(r'@([0-9a-zA-Z\._@]+)', r'<a href="/@\1">@\1</a>', text)
+
 def render_note_element(note: dict, option_data: dict):
     return render_template(
         'app/components/note.html',
@@ -149,6 +167,9 @@ def render_note_element(note: dict, option_data: dict):
         format_datetime=format_datetime,
         make_emoji2image_url=make_emoji2image_url,
         unicode_emoji_hex=unicode_emoji_hex,
+        cleantext=cleantext,
+        convert_tag=convert_tag,
+        mention2link=mention2link,
         PRESET_REACTIONS=PRESET_REACTIONS
     )
 
@@ -366,6 +387,17 @@ def auth_callback_check():
     cur.execute('INSERT INTO users(id, acct, misskey_token, host) VALUES (?, ?, ?, ?)', (session['id'], row['acct'], row['misskey_token'], row['host']))
     cur.close()
     db.commit()
+
+    r = http_session.post(f'https://{row["host"]}/api/meta')
+    if r.status_code != 200:
+        return make_response(f'Get meta failed ({r.status_code})', 500)
+    
+    try:
+        meta = r.json()
+    except:
+        return make_response('Get meta failed (JSON Parse)', 500)
+
+    session['meta'] = meta
     session['logged_in'] = True
     session['host'] = row['host']
     session['misskey_token'] = row['misskey_token']
@@ -615,13 +647,121 @@ def note_detail(note_id: str):
 
     return render_template('app/note_detail.html', note=note, render_note_element=render_note_element)
 
+@app.route('/api/note_fetch', methods=['GET'])
+def api_note_fetch():
+    note_id = request.args.get('noteId')
+    if not note_id:
+        return error_json(1, 'noteId is required')
+    
+    r = http_session.post(f'https://{session["host"]}/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
+    if r.status_code != 200:
+        try:
+            res = r.json()
+            if res.get('error'):
+                if 'No such' in res['error']['message']:
+                    return error_json(1000)
+                return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+        except:
+            return error_json(1, 'Fetch note failed (JSON Decode Error)', internal=True)
+    
+    try:
+        note = r.json()
+    except:
+        return error_json(1, 'Read note failed (JSON Decode Error)', internal=True)
+    
+    res = make_response(json.dumps(note), 200)
+    res.headers['Content-Type'] = 'application/json'
+    return res
+
+@app.route('/api/reaction_search', methods=['GET'])
+@login_check
+def api_reaction_search():
+    note_id = request.args.get('noteId')
+    if not note_id:
+        return error_json(1, 'noteId is required')
+    
+    q = request.args.get('q')
+    if not q:
+        return error_json(1, 'q is required')
+    
+    suggested_reactions: List[dict] = []
+
+    for r in session['meta']['emojis']:
+        if q in r['name']:
+            suggested_reactions.append(r)
+        else:
+            for an in r['aliases']:
+                if q in an:
+                    suggested_reactions.append(r)
+                    break
+    
+    if not suggested_reactions:
+        return 'ありません'
+
+    return render_reaction_picker_element(note_id, suggested_reactions[:10])
+
+@app.route('/@<string:acct>')
+@login_check
+def user_detail(acct: str):
+    
+    username = ''
+    host = None
+
+    if '@' in acct:
+        username, host = acct.split('@', 1)
+    else:
+        username = acct
+    
+    untilId = request.args.get('untilId')
+
+    r = http_session.post(f'https://{session["host"]}/api/users/show', json={'i': session['misskey_token'], 'username': username, 'host': host})
+    if r.status_code != 200:
+        try:
+            res = r.json()
+            if res.get('error'):
+                if 'No such' in res['error']['message']:
+                    return make_response('ユーザーが削除されているか、存在しません。', 404)
+                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+        except:
+            return make_response('Fetch user failed (JSON Decode Error)', 500)
+    
+    try:
+        user = r.json()
+    except:
+        return make_response('Read user failed (JSON Decode Error)', 500)
+    
+    notes_payload = {'i': session['misskey_token'], 'userId': user['id'], 'limit': 11, 'includeReplies': False}
+
+    if untilId:
+        notes_payload['untilId'] = untilId
+
+    r2 = http_session.post(f'https://{session["host"]}/api/users/notes', json=notes_payload)
+    if r2.status_code != 200:
+        try:
+            res = r2.json()
+            if res.get('error'):
+                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+        except:
+            return make_response('Fetch user notes failed (JSON Decode Error)', 500)
+    try:
+        notes = r2.json()
+    except:
+        return make_response('Read user notes failed (JSON Decode Error)', 500)
+    
+    return render_template('app/user_detail.html',
+        user=user,
+        notes=notes,
+        render_note_element=render_note_element,
+        make_mediaproxy_url=make_mediaproxy_url,
+        emoji_convert=emoji_convert
+    )
 
 @app.route('/mediaproxy/<path:path>')
-def mediaproxy(path: str, hq: bool = False):
+def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
 
     path = base64.urlsafe_b64decode(path.encode()).decode()
 
-    cache_name = hashlib.sha256(((f'hq_{MEDIAPROXY_IMAGECOMP_LEVEL_HQ}' if hq else f'q_{MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL}') + re.sub(r'[^a-zA-Z0-9\.]', '_', path)).encode()).hexdigest()
+    cache_name = hashlib.sha256(((f'hq_{MEDIAPROXY_IMAGECOMP_LEVEL_HQ}' if hq else f'q_{MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL}') + ('_jpeg' if jpeg else '')  + re.sub(r'[^a-zA-Z0-9\.]', '_', path)).encode()).hexdigest()
     if os.path.exists('mediaproxy_cache/' + cache_name):
         return send_file('mediaproxy_cache/' + cache_name, mimetype=mimetypes.guess_type(path)[0])
 
@@ -632,8 +772,12 @@ def mediaproxy(path: str, hq: bool = False):
     res = make_response(r.content, 200)
     res.headers['Content-Type'] = r.headers['Content-Type']
 
+    convert_target_mime = ['image/png', 'image/jpeg', 'image/webp', 'image/heif', 'image/heic', 'image/avif']
+    if jpeg:
+        convert_target_mime.extend(['image/gif', 'image/apng'])
+
     ctype = r.headers['Content-Type']
-    if ctype in ['image/png', 'image/jpeg', 'image/webp', 'image/heif', 'image/heic', 'image/avif']:
+    if ctype in convert_target_mime:
         path = urllib.parse.unquote(path)
         ffmpeg_args = ['ffmpeg', '-i', path, '-user_agent', HTTP_USER_AGENT, '-loglevel', 'error', '-c:v', 'mjpeg', '-qscale:v', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL , '-vf', 'scale=400x240:force_original_aspect_ratio=decrease', '-vframes', '1', '-pix_fmt', 'yuvj420p', '-f', 'image2', '-']
         if hq:
@@ -658,6 +802,10 @@ def mediaproxy(path: str, hq: bool = False):
 @app.route('/mediaproxy_hq/<path:path>')
 def mediaproxy_hq(path: str):
     return mediaproxy(path, hq=True)
+
+@app.route('/mediaproxy_jpeg/<path:path>')
+def mediaproxy_jpeg(path: str):
+    return mediaproxy(path, jpeg=True)
 
 @app.route('/emoji2image/<string:emoji_b64>')
 def emoji2image(emoji_b64: str):

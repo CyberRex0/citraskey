@@ -50,3 +50,49 @@
 .note-form {
     position: relative;
 }
+
+.profile-icon {
+    width: 32px;
+    border-radius: 16px;
+}
+
+.user-flag {
+    border-radius: 2px;
+    padding: 0 2px;
+    font-size: 9pt;
+}
+
+.user-flag-moderator {
+    border: 1px solid #0cb615;
+    color: #0cb615;
+}
+
+.user-flag-suspended {
+    border: 1px solid #ff0000;
+    color: #ff0000;
+}
+
+.user-flag-silenced {
+    border: 1px solid #ffaa00;
+    color: #ffaa00;
+}
+
+.user-flag-bot {
+    border: 1px solid #777777;
+    color: #777777;
+}
+
+.user-flag-cat {
+    border: 1px solid #d01294;
+    color: #d01294;
+}
+
+.user-flag-admin {
+    border: 1px solid #0000ff;
+    color: #0000ff;
+}
+
+.user-description {
+    height: 100px;
+    overflow-y: scroll;
+}

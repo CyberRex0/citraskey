@@ -1,17 +1,19 @@
 {% autoescape false %}
-<div class="note {{ 'note-quote' if option_data and option_data['quote'] }}" id="note-{{ note['id'] }}">
+<div class="note {{ 'note-quote' if option_data and option_data['quote'] }}" class="note-{{ note['id'] }}">
     <img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"> {{ emoji_convert(note['user']['name'] or note['user']['username'], note['user']['emojis']) }} {{ '<small>がリノート</small>' if note['renote'] and not note['text'] else '' }}
     <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['emojis']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
-    <p style="display: {{ 'none' if note['cw'] else 'block' }}" id="note-content-{{ note['id'] }}">
-        {{ renderURL(emoji_convert(markdown_render(note['text'] or ''), note['emojis']))[3:-4] }}
-    </p>
 
-    <div>
-    
-    {% for i, file in enumerate(note['files']) %}
-        <a href="{{ make_mediaproxy_url(file['url'], True) }}">添付ファイル {{i+1}}</a>
-    {% endfor %}
+    <div style="display: {{ 'none' if note['cw'] else 'block' }}" id="note-content-{{ note['id'] }}">
+        {{ mention2link(renderURL(emoji_convert(markdown_render(convert_tag(cleantext(note['text'] or ''))), note['emojis']))) }}
     </div>
+
+    {% if note['files'] %}
+    <div>
+        {% for i, file in enumerate(note['files']) %}
+            <a href="{{ make_mediaproxy_url(file['url'], True) }}">添付ファイル {{i+1}}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     {% if note['renote'] %}
         {{ render_note_element(note['renote'], {'quote': note['renote'] and note['text']}) }}
@@ -20,6 +22,7 @@
     <div id="{{ note['id'] }}-reactions">
         {{ reactions_count_html(note['id'], note['reactions'], note['emojis'], note.get('myReaction')) }}
     </div>
+
     <div>
         {% if not note['renote'] %}
         <button onclick="reply('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})">{{ note['repliesCount'] }} 返信</button>
@@ -32,13 +35,17 @@
             <span><a href="/notes/{{ note['replyId'] }}">返信元を見る</a></span>
             {% endif %}
             <span><a href="/notes/{{ note['id'] }}">{{ format_datetime(note['createdAt']) }}</a></span>
-            {% endif %}
         </div>
         <div id="note-reaction-picker-{{ note['id'] }}" style="display: none">
+            <div id="note-reaction-picker-container-preset-{{ note['id'] }}">
             {% for emoji in PRESET_REACTIONS %}
-                <span><img class="emoji-in-text note-reaction-available note-reaction-preset-{{ note['id'] }}" src="{{ make_emoji2image_url(emoji) }}" data-note-id="{{ note['id'] }}" data-reaction="{{ unicode_emoji_hex(emoji) }}"></span>
+                <span><img class="emoji-in-text note-reaction-available note-reaction-picker-child-{{ note['id'] }}" src="{{ make_emoji2image_url(emoji) }}" data-note-id="{{ note['id'] }}" data-reaction-content="{{ unicode_emoji_hex(emoji) }}" data-reaction-type="unicode"></span>
             {% endfor %}
+            </div>
+            <div id="note-reaction-picker-container-{{ note['id'] }}"></div>
+            <input type="text" id="note-reaction-picker-searchbox-{{ note['id'] }}" placeholder="絵文字の名前..."><input type="button" id="note-reaction-picker-searchbutton-{{ note['id'] }}" value="検索">
         </div>
+        {% endif %}
     </div>
     <script type="text/javascript">
         var imgelm = document.getElementById('imageview_element_{{ note['id'] }}');

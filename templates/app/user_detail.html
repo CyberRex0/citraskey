@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | {{ user['name'] }} </title>
+    </head>
+    <body>
+        <p>
+            <a href="/">ホーム</a> | <a href="javascript:history.back()">←戻る</a>
+        </p>
+
+        <div id="profile">
+            <img class="profile-icon" src="{{ make_mediaproxy_url(user['avatarUrl']) }}"> <span style="height: 100%; margin: 0 auto;">{{ emoji_convert(user['name'], user['emojis']) | safe }}</span>
+            {% if user['isAdmin'] %}
+                <span class="user-flag user-flag-admin">Admin</span>
+            {% endif %}
+            {% if user['isModerator'] %}
+                <span class="user-flag user-flag-moderator">Moderator</span>
+            {% endif %}
+            {% if user['isSilenced'] %}
+                <span class="user-flag user-flag-silenced">Silenced</span>
+            {% endif %}
+            {% if user['isBot'] %}
+                <span class="user-flag user-flag-bot">Bot</span>
+            {% endif %}
+            {% if user['isCat'] %}
+                <span class="user-flag user-flag-cat">Cat</span>
+            {% endif %}
+            {% if user['isSuspended'] %}
+                <span class="user-flag user-flag-suspended">Suspended</span>
+            {% endif %}
+            <p style="font-size: 9pt">
+                <strong>{{ user['notesCount'] }}</strong> 投稿 &nbsp; <strong>{{ user['followingCount'] }}</strong> フォロー &nbsp; <strong>{{ user['followersCount'] }} フォロワー</strong>
+            </p>
+            {% if user['description'] %}
+                <p class="user-description">
+                    {{ emoji_convert(user['description'], user['emojis']).replace('\n', '<br>') | safe }}
+                </p>
+            {% endif %}
+        </div>
+
+        <br>
+        {% autoescape false %}
+            {% for note in notes %}
+                {{ render_note_element(note, {}) }}
+            {% endfor %}
+        {% endautoescape %}
+
+        {% include "app/components/footer.html" %}
+    </body>
+</html>
