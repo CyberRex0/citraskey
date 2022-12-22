@@ -10,12 +10,34 @@
             <a href="javascript:location.reload()"><img src="/static/image/reload.png" width="24"/></a>
             &nbsp;
             <a href="/notifications"><img src="/static/image/notification.png" width="24"/></a>
+            &nbsp;
+            <a href="/settings"><img src="/static/image/settings.png" width="24"></a>
         </div>
+        {% if request.args.get('untilId') %}
+            <center>
+                <a href="/">最新を見る</a>
+            </center>
+            <hr size="1">
+        {% endif %}
         {% autoescape false %}
+        {% set last_renote_id = '' %}
+        {% set nest_count = 1 %}
         {% for note in notes %}
-            {{ render_note_element(note, {}) }}
+            {% if note['renote'] and not note['text'] %}
+                {% if note['renote']['id'] == last_renote_id %}
+                    {% set nest_count = 0 %}
+                {% endif %}
+            {% endif %}
+            {{ render_note_element(note, {}, nest_count) }}
+            {% if note['renote'] and not note['text'] %}
+                {% set last_renote_id = note['id'] %}
+            {% endif %}
         {% endfor %}
         {% endautoescape %}
+        <hr size="1">
+        <center>
+            <a href="/?untilId={{ notes[-1]['id'] }}">もっと見る</a>
+        </center>
         {% include "app/components/footer.html" %}
     </body>
 </html>

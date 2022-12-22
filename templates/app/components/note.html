@@ -1,6 +1,22 @@
 {% autoescape false %}
-<div class="note {{ 'note-quote' if option_data and option_data['quote'] }}" id="note-{{ note['id'] }}" data-user-id="{{ note['user']['id'] }}" data-note-uri="https://{{ user_host }}/notes/{{ note['id'] }}" data-note-remote-uri="{{ note['uri'] }}">
-    <a href="/@{{ note['user']['username'] + ('@' + note['user']['host'] if note['user']['host'] else '') }}"><img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"></a> {{ emoji_convert(note['user']['name'] or note['user']['username'], note['user']['emojis']) }} {{ '<small>がリノート</small>' if note['renote'] and not note['text'] else '' }}
+{% set renote = (note['renote'] and not note['text']) %}
+<div class="note {{ 'note-quote' if option_data and option_data['quote'] }} {{ 'note-renote' if renote else 'note-normal' }}" id="note-{{ note['id'] }}" data-user-id="{{ note['user']['id'] }}" data-note-uri="https://{{ user_host }}/notes/{{ note['id'] }}" data-note-remote-uri="{{ note['uri'] }}">
+    {% set acct = note['user']['username'] + ('@' + note['user']['host'] if note['user']['host'] else '') %}
+    <div class="note-header">
+        <table class="table-flex">
+            <tr>
+                <td><a href="/@{{ acct }}"><img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"></a></td>
+                <td class="note-header-name">
+                    {{ emoji_convert(note['user']['name'] or note['user']['username'], note['user']['emojis']) }} {{ '<small>がリノート</small>' if renote else '' }}
+                    {% if not renote %}
+                        <br>
+                        <span style="font-size: 8pt">@{{ acct }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+        {% if not renote %}<img src="/static/image/visibility/{{ note['visibility'] }}.png" class="visibility-icon" style="position:absolute; right: 2px; top: 2px;">{% endif %}
+    </div>
     <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['emojis']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
 
     <div style="display: {{ 'none' if note['cw'] else 'block' }}" id="note-content-{{ note['id'] }}">
@@ -16,7 +32,7 @@
     {% endif %}
 
     {% if note['renote'] %}
-        {{ render_note_element(note['renote'], {'quote': note['renote'] and note['text']}) }}
+        {{ render_note_element(note['renote'], {'quote': note['renote'] and note['text']}, nest_count - 1) }}
     {% endif %}
 
     <div id="{{ note['id'] }}-reactions">
@@ -24,7 +40,7 @@
     </div>
 
     <div>
-        {% if not note['renote'] %}
+        {% if not renote %}
         <button onclick="reply('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})">{{ note['repliesCount'] }} 返信</button>
         <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}> {{ note['renoteCount'] }} リノート</button>
         <button onclick="quote('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}>引用</button>

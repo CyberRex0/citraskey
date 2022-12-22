@@ -1,4 +1,5 @@
 .note {
+    position: relative;
     margin-bottom: 8px;
     padding: 2px;
     border: 1px solid black;
@@ -10,12 +11,29 @@
     border: 1px dashed black !important;
 }
 
+.note-renote {
+    border: none !important;
+    overflow-x: hidden;
+}
+
+.note-renote > .note-header img {
+    width: 16px;
+}
+
+.note-renote > .note-header {
+    font-size: 9pt;
+}
+
+.note-normal {
+    font-size: initial !important;
+}
+
 .emoji-in-text {
     max-width: 16px;
 }
 
 .icon-in-note {
-    max-width: 24px;
+    max-width: 30px;
 }
 
 .hide {
@@ -95,4 +113,16 @@
 .user-description {
     max-height: 100px;
     overflow-y: scroll;
+}
+
+.visibility-icon {
+    width: 16px;
+}
+
+.table-flex{
+    border: none;
+}
+
+.note-header-name {
+    line-height: 0.9;
 }

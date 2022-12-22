@@ -9,32 +9,45 @@
             <a href="/">ホーム</a> | <a href="javascript:history.back()">←戻る</a>
         </p>
 
+        {% set acct = user['username'] + ('@' + user['host'] if user['host'] else '') %}
+
         <div id="profile">
-            <img class="profile-icon" src="{{ make_mediaproxy_url(user['avatarUrl']) }}"> <span style="height: 100%; margin: 0 auto;">{{ emoji_convert(user['name'], user['emojis']) | safe }}</span>
-            {% if user['isAdmin'] %}
-                <span class="user-flag user-flag-admin">Admin</span>
-            {% endif %}
-            {% if user['isModerator'] %}
-                <span class="user-flag user-flag-moderator">Moderator</span>
-            {% endif %}
-            {% if user['isSilenced'] %}
-                <span class="user-flag user-flag-silenced">Silenced</span>
-            {% endif %}
-            {% if user['isBot'] %}
-                <span class="user-flag user-flag-bot">Bot</span>
-            {% endif %}
-            {% if user['isCat'] %}
-                <span class="user-flag user-flag-cat">Cat</span>
-            {% endif %}
-            {% if user['isSuspended'] %}
-                <span class="user-flag user-flag-suspended">Suspended</span>
-            {% endif %}
+            <table class="table-flex">
+                <tbody>
+                    <tr>
+                        <td><img class="profile-icon" src="{{ make_mediaproxy_url(user['avatarUrl']) }}"></td>
+                        <td>
+                            {{ emoji_convert(user['name'], user['emojis']) | safe }}
+                            {% if user['isAdmin'] %}
+                                <span class="user-flag user-flag-admin">Admin</span>
+                            {% endif %}
+                            {% if user['isModerator'] %}
+                                <span class="user-flag user-flag-moderator">Moderator</span>
+                            {% endif %}
+                            {% if user['isSilenced'] %}
+                                <span class="user-flag user-flag-silenced">Silenced</span>
+                            {% endif %}
+                            {% if user['isBot'] %}
+                                <span class="user-flag user-flag-bot">Bot</span>
+                            {% endif %}
+                            {% if user['isCat'] %}
+                                <span class="user-flag user-flag-cat">Cat</span>
+                            {% endif %}
+                            {% if user['isSuspended'] %}
+                                <span class="user-flag user-flag-suspended">Suspended</span>
+                            {% endif %}
+                            <br>
+                            <small>@{{ acct }}</small>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
             <p style="font-size: 9pt">
                 <strong>{{ user['notesCount'] }}</strong> 投稿 &nbsp; <strong>{{ user['followingCount'] }}</strong> フォロー &nbsp; <strong>{{ user['followersCount'] }} フォロワー</strong>
             </p>
             {% if user['description'] %}
                 <p class="user-description">
-                    {{ emoji_convert(user['description'], user['emojis']).replace('\n', '<br>') | safe }}
+                    {{ mention2link(emoji_convert(user['description'], user['emojis']).replace('\n', '<br>')) | safe }}
                 </p>
             {% endif %}
         </div>
@@ -45,6 +58,11 @@
                 {{ render_note_element(note, {}) }}
             {% endfor %}
         {% endautoescape %}
+        <hr size="1">
+        <center>
+            <a href="/@{{ acct }}?untilId={{ notes[-1]['id'] }}">もっと見る
+            </a>
+        </center>
 
         {% include "app/components/footer.html" %}
     </body>

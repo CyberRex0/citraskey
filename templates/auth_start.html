@@ -3,14 +3,14 @@
     <head>
         <meta name="viewport" content="width=device-width">
         <meta charset="utf-8">
-        <title>3DSskey | ログイン</title>
+        <title>Citraskey | ログイン</title>
     </head>
     <body>
         <h1>ログイン</h1>
         <br>
         <div>
             以下のURLやQRコードにスマートフォンやPCでアクセスして {{ hostname }} の認証を完了してください。<br>
-            {{ auth_url }}<br>
+            <a href="{{ auth_url }}" target="_blank">{{ auth_url }}</a><br>
             <img src="{{ qr_base64 }}" style="width: 180px">
             <form action="/auth/check" method="POST">
                 {% if not_ready %}

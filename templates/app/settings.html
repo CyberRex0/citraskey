@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | 設定</title>
+    </head>
+    <body class="m4">
+        <a href="/">ホーム</a>
+        <br>
+        <div class="m4">
+            {% if updated %}
+            <p style="color: green">設定を更新しました。</p>
+            {% endif %}
+            <form action="" method="POST">
+                <input type="checkbox" id="settings-form-alwaysconvertjpeg" name="alwaysConvertJPEG" {{ 'checked' if settings['alwaysConvertJPEG'] else '' }}><label for="settings-form-alwaysconvertjpeg"> GIFを含む画像をJPEGに変換して表示する (画質低下&軽量化)</label>
+                <br>
+                <input type="submit" value="適用">
+            </form>
+        </div>
+        {% include "app/components/footer.html" %}
+    </body>
+</html>

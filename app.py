@@ -25,7 +25,7 @@ from typing import Optional
 import time
 from functools import wraps
 import datetime
-from exceptions import APICallError
+import magic
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
@@ -37,6 +37,7 @@ cur = db.cursor()
 cur.execute('CREATE TABLE IF NOT EXISTS auth_session (id TEXT, mi_session_id TEXT, misskey_token TEXT, host TEXT, acct TEXT, callback_auth_code TEXT, ready INTEGER, auth_url TEXT, auth_qr_base64 TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS users (id TEXT, acct TEXT, misskey_token TEXT, host TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS shortlink (sid TEXT, url TEXT)')
+cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER)')
 cur.close()
 db.commit()
 
@@ -45,6 +46,7 @@ app.secret_key = b'SECRET'
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SECRET_KEY'] = 'SECRET'
 Session(app)
+request.client_settings: dict
 
 HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15 3DSskey/0.0.1'
 
@@ -154,7 +156,9 @@ def convert_tag(text: str):
 def mention2link(text: str):
     return re.sub(r'@([0-9a-zA-Z\._@]+)', r'<a href="/@\1">@\1</a>', text)
 
-def render_note_element(note: dict, option_data: dict):
+def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
+    if nest_count < 0:
+        return ''
     return render_template(
         'app/components/note.html',
         note=note,
@@ -175,6 +179,8 @@ def render_note_element(note: dict, option_data: dict):
         i=session['i'],
         meta=session['meta'],
         user_host=session['host'],
+        nest_count=nest_count,
+        str=str,
         PRESET_REACTIONS=PRESET_REACTIONS
     )
 
@@ -264,10 +270,25 @@ def login_check(f):
         cur = db.cursor()
         cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
         row = cur.fetchone()
-        cur.close()
-
         if not row:
+            cur.close()
             return error_json(1002, 'You are not logged in')
+        
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+def inject_client_settings(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        
+        cur = db.cursor()
+        cur.execute('SELECT * FROM settings WHERE acct = ?', (session['acct'],))
+        row = cur.fetchone()
+        cur.close()
+        if not row:
+            return error_json(1002, 'You must login again')
+        request.client_settings = row
         
         return f(*args, **kwargs)
 
@@ -446,7 +467,16 @@ def auth_callback_check():
     session['meta'] = meta
     session['logged_in'] = True
     session['host'] = row['host']
+    session['acct'] = f'{session["i"]["username"]}@{row["host"]}'
     session['misskey_token'] = row['misskey_token']
+
+    cur = db.cursor()
+    cur.execute('SELECT * FROM settings WHERE acct = ?', (row['acct'],))
+    row = cur.fetchone()
+    if not row:
+        cur.execute('INSERT INTO settings(acct, alwaysConvertJPEG) VALUES (?, ?)', (session['acct'], 0))
+        db.commit()
+    cur.close()
 
     return redirect('/')
 
@@ -481,7 +511,15 @@ def home_timeline():
     
     #m = Misskey(address=row['host'], i=row['misskey_token'])
     #notes = m.notes_timeline()
-    ok, notes, r = api(f'/api/notes/timeline', host=row['host'], json={'i': row['misskey_token'], 'limit': 20})
+
+    untilId = request.args.get('untilId')
+
+    payload = {'i': row['misskey_token'], 'limit': 20}
+
+    if untilId:
+        payload['untilId'] = untilId
+
+    ok, notes, r = api(f'/api/notes/timeline', host=row['host'], json=payload)
     if not ok:
         return make_response(f'Timeline failed ({r.status_code})', 400)
 
@@ -507,6 +545,26 @@ def notifications():
         notifications=notifications,
         render_notification=render_notification
     )
+
+@app.route('/settings', methods=['GET', 'POST'])
+@login_check
+@inject_client_settings
+def settings():
+
+    if request.method == 'GET':
+        return render_template('app/settings.html', settings=request.client_settings, updated=False)
+    
+    if request.method == 'POST':
+        alwaysConvertJPEG = 1 if request.form.get('alwaysConvertJPEG')=='on' else 0
+
+        cur = db.cursor()
+        cur.execute('UPDATE settings SET alwaysConvertJPEG = ? WHERE acct = ?', (alwaysConvertJPEG, session['acct']))
+        cur.execute('SELECT * FROM settings WHERE acct = ?', (session['acct'],))
+        row = cur.fetchone()
+        cur.close()
+        db.commit()
+
+        return render_template('app/settings.html', settings=row, updated=True)
 
 @app.route('/api/post', methods=['POST'])
 @login_check
@@ -760,7 +818,7 @@ def user_detail(acct: str):
     if untilId:
         notes_payload['untilId'] = untilId
 
-    ok, res, r2 = http_session.post(f'https://{session["host"]}/api/users/notes', json=notes_payload)
+    ok, res, r2 = api(f'/api/users/notes', json=notes_payload)
     if not ok:
         if res.get('error'):
             return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
@@ -772,7 +830,8 @@ def user_detail(acct: str):
         notes=notes,
         render_note_element=render_note_element,
         make_mediaproxy_url=make_mediaproxy_url,
-        emoji_convert=emoji_convert
+        emoji_convert=emoji_convert,
+        mention2link=mention2link
     )
 
 @app.route('/api/note_delete', methods=['GET'])
@@ -833,7 +892,10 @@ def api_note_unpin():
     return make_response('', 200)
 
 @app.route('/mediaproxy/<path:path>')
+@inject_client_settings
 def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
+
+    alwayscnvjpeg = request.client_settings['alwaysConvertJPEG']
 
     path = base64.urlsafe_b64decode(path.encode()).decode()
 
@@ -847,10 +909,10 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
     if '//' in path[len('http://'):]:
         raise Exception('E')
 
-
-    cache_name = hashlib.sha256(((f'hq_{MEDIAPROXY_IMAGECOMP_LEVEL_HQ}' if hq else f'q_{MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL}') + ('_jpeg' if jpeg else '')  + re.sub(r'[^a-zA-Z0-9\.]', '_', path)).encode()).hexdigest()
+    cache_name = hashlib.sha256(((f'hq_{MEDIAPROXY_IMAGECOMP_LEVEL_HQ}' if hq else f'q_{MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL}') + ('_jpeg' if jpeg or alwayscnvjpeg else '')  + re.sub(r'[^a-zA-Z0-9\.]', '_', path)).encode()).hexdigest()
     if os.path.exists('mediaproxy_cache/' + cache_name):
-        return send_file('mediaproxy_cache/' + cache_name, mimetype=mimetypes.guess_type(path)[0])
+        with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
+            return send_file('mediaproxy_cache/' + cache_name, mimetype=m.id_filename('mediaproxy_cache/' + cache_name))
 
     r = http_session.get(path)
     if r.status_code != 200:
@@ -860,10 +922,14 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
     res.headers['Content-Type'] = r.headers['Content-Type']
 
     convert_target_mime = ['image/png', 'image/jpeg', 'image/webp', 'image/heif', 'image/heic', 'image/avif']
-    if jpeg:
+    if jpeg or alwayscnvjpeg:
         convert_target_mime.extend(['image/gif', 'image/apng'])
 
     ctype = r.headers['Content-Type']
+    if not ctype or ctype == 'application/octet-stream':
+        with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
+            ctype = m.id_buffer(r.content[:1024])
+
     if ctype in convert_target_mime:
         path = urllib.parse.unquote(path)
         ffmpeg_args = ['ffmpeg', '-i', path, '-user_agent', HTTP_USER_AGENT, '-loglevel', 'error', '-c:v', 'mjpeg', '-qscale:v', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL , '-vf', 'scale=400x240:force_original_aspect_ratio=decrease', '-vframes', '1', '-pix_fmt', 'yuvj420p', '-f', 'image2', '-']
@@ -887,6 +953,7 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
     return res
 
 @app.route('/mediaproxy_hq/<path:path>')
+@inject_client_settings
 def mediaproxy_hq(path: str):
     return mediaproxy(path, hq=True)
 
