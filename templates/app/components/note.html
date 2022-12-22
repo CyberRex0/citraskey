@@ -1,6 +1,6 @@
 {% autoescape false %}
-<div class="note {{ 'note-quote' if option_data and option_data['quote'] }}" class="note-{{ note['id'] }}">
-    <img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"> {{ emoji_convert(note['user']['name'] or note['user']['username'], note['user']['emojis']) }} {{ '<small>がリノート</small>' if note['renote'] and not note['text'] else '' }}
+<div class="note {{ 'note-quote' if option_data and option_data['quote'] }}" id="note-{{ note['id'] }}" data-user-id="{{ note['user']['id'] }}" data-note-uri="https://{{ user_host }}/notes/{{ note['id'] }}" data-note-remote-uri="{{ note['uri'] }}">
+    <a href="/@{{ note['user']['username'] + ('@' + note['user']['host'] if note['user']['host'] else '') }}"><img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"></a> {{ emoji_convert(note['user']['name'] or note['user']['username'], note['user']['emojis']) }} {{ '<small>がリノート</small>' if note['renote'] and not note['text'] else '' }}
     <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['emojis']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
 
     <div style="display: {{ 'none' if note['cw'] else 'block' }}" id="note-content-{{ note['id'] }}">
@@ -29,8 +29,22 @@
         <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}> {{ note['renoteCount'] }} リノート</button>
         <button onclick="quote('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}>引用</button>
         <button onclick="reaction('{{ note['id'] }}')">絵文字</button>
+        <button onclick="showSelectMenu('{{ note['id'] }}')" style="float: right;">...</button>
         <br>
         <div style="float: right; font-size: 7pt;">
+            <select class="note-menu" id="note-menu-{{ note['id'] }}" style="display: none" data-note-id="{{ note['id'] }}">
+                <option value="none" disabled selected>選択...</option>
+                {% if note['user']['id'] == i['id'] or i['isModerator'] or i['isAdmin'] %}
+                    <option value="delete">ノートを削除</option>
+                {% endif %}
+                {% if note['user']['id'] == i['id'] and not (note['id'] in i['pinnedNoteIds']) %}
+                    <option value="pin">ピン留め</option>
+                {% endif %}
+                {% if note['user']['id'] == i['id'] and (note['id'] in i['pinnedNoteIds'])%}
+                    <option value="unpin">ピン留め解除</option>
+                {% endif %}
+                <option value="report">通報</option>
+            </select>
             {% if note['reply'] %}
             <span><a href="/notes/{{ note['replyId'] }}">返信元を見る</a></span>
             {% endif %}

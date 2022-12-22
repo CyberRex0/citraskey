@@ -7,7 +7,10 @@ var ERROR_IDS = {
     1001: 'リノート操作に失敗しました',
     1002: 'ログインしていません',
     1003: 'パラメータが欠落しています',
-    1004: 'レート制限中です。しばらくしてから再度お試しください'
+    1004: 'レート制限中です。しばらくしてから再度お試しください',
+    1005: 'ユーザーが見つかりません',
+    1006: 'すでにピン留めされています',
+    1007: 'リノート対象が見つかりません'
 }
 
 var NOTE_VISIBILITY = {
@@ -178,6 +181,11 @@ function fetchNote(note_id) {
     });
 }
 
+function showSelectMenu(note_id) {
+    var menuEl = document.getElementById('note-menu-' + note_id);
+    menuEl.style.display = (menuEl.style.display=='none') ? 'inline' : 'none';
+}
+
 function scrollToElement(el) {
     var clientRect = el.getBoundingClientRect();
     var px = window.pageXOffset + clientRect.left;
@@ -235,6 +243,58 @@ var emojiPickerButtonHandler = function (e) {
     });
 }
 
+var noteMenuHandler = function (e) {
+    var noteId = e.target.getAttribute('data-note-id');
+    var selectedMenu = e.target.value;
+    switch (selectedMenu) {
+        case 'delete':
+            if (window.confirm('本当に削除しますか？') === true) {
+                api_request('/api/note_delete?noteId=' + noteId, function (status, body) {
+                    if (status == 200) {
+                        var noteEl = document.getElementById('note-' + noteId);
+                        noteEl.parentNode.removeChild(noteEl);
+                        alert('投稿を削除しました。');
+                    }
+                });
+            }
+            break;
+        
+        case 'pin':
+            api_request('/api/note_pin?noteId=' + noteId, function (status, body) {
+                if (status == 200) {
+                    alert('ピン留めしました。');
+                }
+            });
+            break;
+
+        case 'unpin':
+            if (window.confirm('本当にピン留めを解除しますか？') === true) {
+                api_request('/api/note_unpin?noteId=' + noteId, function (status, body) {
+                    if (status == 200) {
+                        alert('ピン留めを解除しました。');
+                    }
+                });
+            }
+            break;
+        
+        case 'report':
+            var noteEl = document.getElementById('note-' + noteId);
+            var userId = noteEl.getAttribute('data-user-id');
+            var uri =  noteEl.getAttribute('data-note-remote-uri') || noteEl.getAttribute('data-note-uri');
+            var content = window.prompt('通報理由を入力してください。');
+            if (content && content.trim() != '') {
+                var text = 'Note: ' + uri + '\n-----\n' + content.trim();
+                api_request('/api/report?userId=' + userId + '&comment=' + encodeURI(text), function (status, body) {
+                    if (status == 200) {
+                        alert('通報しました。');
+                    }
+                });
+            }
+            break;
+    }
+    e.target.selectedIndex = 0;
+}
+
 function registerPickerReactionHandlerById(noteId) {
     var pickerReactionButtons = document.getElementsByClassName('note-reaction-picker-child-' + noteId);
     for (var i = 0; i < pickerReactionButtons.length; i++) {
@@ -256,12 +316,20 @@ function registerEmojiButtonHandlerByNoteId(noteId) {
     }
 }
 
+function registerNoteMenuHandler() {
+    var noteMenus = document.getElementsByClassName('note-menu');
+    for (var i = 0; i < noteMenus.length; i++) {
+        noteMenus[i].onchange = noteMenuHandler;
+    }
+}
+
 window.addEventListener('load', function () {
     if (!document.getElementsByClassName) {
         alert('getElementsByClassName is not supported.');
         return;
     }
     registerEmojiButtonHandler();
+    registerNoteMenuHandler();
 
     var noteFormVisibility = document.getElementById('note-form-select-visibility');
     var noteFormLocalOnly = document.getElementById('nf_localonly');

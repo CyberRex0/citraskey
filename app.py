@@ -2,7 +2,7 @@ import io
 import mimetypes
 import os
 import re
-from typing import List
+from typing import List, Tuple
 from flask import Flask, make_response, redirect, render_template, send_file, session, request
 from flask_session import Session
 import sqlite3
@@ -13,6 +13,7 @@ import urllib.parse
 import base64
 import requests
 from misskey import Misskey
+from misskey.enum import Permissions as MisskeyPermissions
 import markdown
 import subprocess
 import hashlib
@@ -24,6 +25,7 @@ from typing import Optional
 import time
 from functools import wraps
 import datetime
+from exceptions import APICallError
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
@@ -170,6 +172,9 @@ def render_note_element(note: dict, option_data: dict):
         cleantext=cleantext,
         convert_tag=convert_tag,
         mention2link=mention2link,
+        i=session['i'],
+        meta=session['meta'],
+        user_host=session['host'],
         PRESET_REACTIONS=PRESET_REACTIONS
     )
 
@@ -215,6 +220,40 @@ def error_json(error_id: int, reason: Optional[str] = None, internal: bool = Fal
         'errorId': error_id,
         'reason': reason
     }), status or (500 if internal else 400))
+
+def fetch_meta(host: str):
+    r = http_session.post('https://' + host + '/api/meta')
+    if r.status_code != 200:
+        raise Exception('Failed to fetch meta')
+    return r.json()
+
+def fetch_i(host: str, token: str):
+    r = http_session.post('https://' + host + '/api/i', json={'i': token})
+    if r.status_code != 200:
+        raise Exception('Failed to fetch i')
+    return r.json()
+
+def api(url, host: str = None, method: str = 'POST', decode_json: bool = True, *args, **kwargs) -> Tuple[bool, Optional[dict], requests.Response]:
+    if host:
+        hst = host
+    else:
+        hst = session['host']
+    if not hst:
+        raise Exception('No host')
+    
+    r = getattr(http_session, method.lower())('https://' + hst + url, *args, **kwargs)
+    if r.status_code == 200:
+        obj = {}
+        if decode_json:
+            obj = r.json()
+        return True, obj, r
+    if r.status_code == 204:
+        return True, None, r
+    if r.status_code >= 400:
+        obj = {}
+        if decode_json:
+            obj = r.json()
+        return False, obj, r
 
 def login_check(f):
     @wraps(f)
@@ -267,19 +306,26 @@ def auth_start():
     mi_sesid = str(uuid.uuid4())
     callbk_code = randomstr(8)
 
-    callback_url = f'http://{request.host}/auth/callback'
+    callback_url = f'{"https" if request.is_secure else "http"}://{request.host}/auth/callback'
 
     urlargs = urllib.parse.urlencode({
-        'name': '3DSskey',
-        'permission': ','.join([
-            'read:account',
-            'read:drive',
-            'write:drive',
-            'write:notes',
-            'read:notifications',
-            'read:reactions',
-            'write:reactions'
-        ]),
+        'name': 'Citraskey',
+        'permission': ','.join([perm.value for perm in [
+
+            MisskeyPermissions.READ_ACCOUNT,
+            MisskeyPermissions.READ_DRIVE,
+            MisskeyPermissions.READ_NOTIFICATIONS,
+            MisskeyPermissions.READ_REACTIONS,
+            MisskeyPermissions.READ_MESSAGING,
+
+            MisskeyPermissions.WRITE_ACCOUNT,
+            MisskeyPermissions.WRITE_DRIVE,
+            MisskeyPermissions.WRITE_NOTES,
+            MisskeyPermissions.WRITE_REACTIONS,
+            MisskeyPermissions.WRITE_VOTES,
+            MisskeyPermissions.WRITE_MESSAGING
+
+        ]]),
         'callback': callback_url
     })
     auth_url = f'http://{hostname}/miauth/{mi_sesid}?{urlargs}'
@@ -290,7 +336,7 @@ def auth_start():
     qr_base64 = 'data:image/png;base64,' + base64.b64encode(f.read()).decode('utf-8')
 
     sid = make_short_link(auth_url)
-    short_auth_url = f'http://{request.host}/s/{sid}'
+    short_auth_url = f'{"https" if request.is_secure else "http"}://{request.host}/s/{sid}'
 
     cur = db.cursor()
     cur.execute('INSERT INTO auth_session(id, mi_session_id, misskey_token, host, callback_auth_code, ready, auth_url, auth_qr_base64) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (session['auth_id'], mi_sesid, None, hostname, callbk_code, 0, short_auth_url, qr_base64))
@@ -331,15 +377,14 @@ def auth_callback():
     if not row:
         return make_response('session is invalid', 400)
     
-    r = http_session.post(f'https://{row["host"]}/api/miauth/{session_id}/check')
-    if r.status_code != 200:
+    ok, res, r = api(f'/api/miauth/{session_id}/check', host=row['host'])
+    if not ok:
         cur = db.cursor()
         cur.execute('DELETE FROM auth_session WHERE mi_session_id = ?', (session_id,))
         cur.close()
         db.commit()
         return make_response(f'Session check failed ({r.status_code})', 400)
     
-    res = r.json()
     if not res['ok']:
         cur = db.cursor()
         cur.execute('DELETE FROM auth_session WHERE mi_session_id = ?', (session_id,))
@@ -397,6 +442,7 @@ def auth_callback_check():
     except:
         return make_response('Get meta failed (JSON Parse)', 500)
 
+    session['i'] = fetch_i(row['host'], row['misskey_token'])
     session['meta'] = meta
     session['logged_in'] = True
     session['host'] = row['host']
@@ -435,10 +481,9 @@ def home_timeline():
     
     #m = Misskey(address=row['host'], i=row['misskey_token'])
     #notes = m.notes_timeline()
-    r = http_session.post(f'https://{row["host"]}/api/notes/timeline', json={'i': row['misskey_token'], 'limit': 20})
-    if r.status_code != 200:
+    ok, notes, r = api(f'/api/notes/timeline', host=row['host'], json={'i': row['misskey_token'], 'limit': 20})
+    if not ok:
         return make_response(f'Timeline failed ({r.status_code})', 400)
-    notes = r.json()
 
     for note in notes:
         print(f'{note["user"]["username"]}: {note["text"]}')
@@ -453,12 +498,10 @@ def home_timeline():
 @app.route('/notifications', methods=['GET'])
 @login_check
 def notifications():
-    r = http_session.post(f'https://{session["host"]}/api/i/notifications', json={'i': session['misskey_token'], 'limit': 40})
-    if r.status_code != 200:
+    ok, notifications, r = api(f'/api/i/notifications', json={'i': session['misskey_token'], 'limit': 40})
+    if not ok:
         return make_response(f'failed ({r.status_code})', 500)
     
-    notifications = r.json()
-
     return render_template(
         'app/notifications.html',
         notifications=notifications,
@@ -505,11 +548,16 @@ def api_post():
     if request.form.get('visibility'):
         payload['visibility'] = request.form.get('visibility')
 
-    r = http_session.post(f'https://{session["host"]}/api/notes/create', json=payload)
-
-    if r.status_code != 200:
+    ok, res, r = api(f'/api/notes/create', json=payload)
+    if not ok:
+        if res:
+            if res.get('error'):
+                code = res['error']['code']
+                if code == 'NO_SUCH_RENOTE_TARGET':
+                    return error_json(1007)
+                else:
+                    return error_json(1, res['error']['message'])
         return make_response(f'Post failed ({r.status_code})', 500)
-    res = r.json()
 
     return redirect(request.headers['Referer'])
 
@@ -520,20 +568,16 @@ def api_renote():
     if not note_id:
         return error_json(1, 'noteId is required')
     
-    r = http_session.post(f'https://{session["host"]}/api/notes/create', json={'i': session['misskey_token'], 'renoteId': note_id})
-    try:
-        res = r.json()
-    except:
-        return error_json(1, 'Post failed (API JSON Decode Error)', internal=True)
-    
-    if r.status_code != 200:
-        if r.status_code == 429:
-            return error_json(1004, 'Too many requests', status=429)
-        if res.get('error'):
-            if 'No such' in res['error']['message']:
-                return error_json(1000)
-            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
-        return error_json(1, f'Post failed ({r.status_code})', internal=True)
+    ok, res, r = api(f'/api/notes/create', json={'i': session['misskey_token'], 'renoteId': note_id})
+    if not ok:
+        if res:
+            if res.get('error'):
+                code = res['error']['code']
+                if code == 'NO_SUCH_RENOTE_TARGET':
+                    return error_json(1007)
+                else:
+                    return error_json(1, res['error']['message'])
+        return make_response(f'Renote failed ({r.status_code})', 500)
     
     return make_response('', 200)
 
@@ -544,15 +588,9 @@ def api_undo_renote():
     if not note_id:
         return error_json(1, 'noteId is required', 400)
     
-    r = http_session.post(f'https://{session["host"]}/api/notes/unrenote', json={'i': session['misskey_token'], 'noteId': note_id})
-    try:
-        res = r.json()
-    except:
-        if r.status_code == 204:
-            return make_response('', 200)
-        return error_json(1, f'Post failed (API JSON Decode Error)\n{r.status_code}')
+    ok, res, r = api(f'/api/notes/unrenote', json={'i': session['misskey_token'], 'noteId': note_id})
     
-    if r.status_code != 200:
+    if not ok:
         if r.status_code == 429:
             return error_json(1004, 'Too many requests', status=429)
         if res.get('error'):
@@ -584,66 +622,42 @@ def api_reaction():
         except:
             return error_json(1, 'Invalid unicode character')
     
-    r = http_session.post(f'https://{session["host"]}/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
-    if r.status_code != 200:
-        try:
-            res = r.json()
+    ok, res, r = api(f'/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
+    if not ok:
+        if res.get('error'):
+            if 'No such' in res['error']['message']:
+                return error_json(1000)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    else:
+        if res:
+            if res.get('myReaction'):
+                api(f'/api/notes/reactions/delete', json={'i': session['misskey_token'], 'noteId': note_id})
+                time.sleep(0.2)
+
+    if reaction:
+        ok, res, r = api(f'/api/notes/reactions/create', json={'i': session['misskey_token'], 'noteId': note_id, 'reaction': reaction})
+        if r.status_code >= 400:
             if res.get('error'):
                 if 'No such' in res['error']['message']:
                     return error_json(1000)
                 return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
-        except:
-            return error_json(1, 'Reaction failed (Prefetch Error, JSON Decode Error)', internal=True)
-    else:
-        try:
-            res = r.json()
-        except:
-            return error_json(1, 'Reaction failed (Prefetch, JSON Decode Error)', internal=True)
-        if res.get('myReaction'):
-            http_session.post(f'https://{session["host"]}/api/notes/reactions/delete', json={'i': session['misskey_token'], 'noteId': note_id})
-            time.sleep(0.3)
 
-    if reaction:
-        r = http_session.post(f'https://{session["host"]}/api/notes/reactions/create', json={'i': session['misskey_token'], 'noteId': note_id, 'reaction': reaction})
-        if r.status_code >= 400:
-            try:
-                res = r.json()
-                if res.get('error'):
-                    if 'No such' in res['error']['message']:
-                        return error_json(1000)
-                    return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
-            except:
-                return error_json(1, 'Reaction failed (Reaction, JSON Decode Error)', internal=True)
-
-    r = http_session.post(f'https://{session["host"]}/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
-    if r.status_code != 200:
+    ok, res, r = api(f'/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
+    if not ok:
         return error_json(1, 'Reaction failed (After-Fetch Error)', internal=True)
-
-    try:
-        res = r.json()
-    except:
-        return error_json(1, 'Reaction failed (After-Fetch, JSON Decode Error)', internal=True)
     
     return reactions_count_html(res['id'], res['reactions'], res['emojis'], res.get('myReaction'))
 
 @app.route('/notes/<string:note_id>/')
 @login_check
 def note_detail(note_id: str):
-    r = http_session.post(f'https://{session["host"]}/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
-    if r.status_code != 200:
-        try:
-            res = r.json()
-            if res.get('error'):
-                if 'No such' in res['error']['message']:
-                    return make_response('ノートが削除されているか、存在しません。', 404)
-                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
-        except:
-            return make_response('Fetch note failed (JSON Decode Error)', 500)
-    
-    try:
-        note = r.json()
-    except:
-        return make_response('Read note failed (JSON Decode Error)', 500)
+    ok, note, r = api(f'/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
+    if not ok:
+        res = r.json()
+        if res.get('error'):
+            if 'No such' in res['error']['message']:
+                return make_response('ノートが削除されているか、存在しません。', 404)
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
 
     return render_template('app/note_detail.html', note=note, render_note_element=render_note_element)
 
@@ -653,8 +667,8 @@ def api_note_fetch():
     if not note_id:
         return error_json(1, 'noteId is required')
     
-    r = http_session.post(f'https://{session["host"]}/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
-    if r.status_code != 200:
+    ok, res, r = api(f'/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
+    if not ok:
         try:
             res = r.json()
             if res.get('error'):
@@ -700,6 +714,24 @@ def api_reaction_search():
 
     return render_reaction_picker_element(note_id, suggested_reactions[:10])
 
+@app.route('/api/report', methods=['GET'])
+def api_note_report():
+    userId = request.args.get('userId')
+    comment = request.args.get('comment')
+    if not userId:
+        return error_json(1, 'userId is required')
+    if not comment:
+        return error_json(1, 'comment is required')
+    
+    ok, res, r = api(f'/api/users/report-abuse', json={'i': session['misskey_token'], 'userId': userId, 'comment': comment})
+    if not ok:
+        if res.get('error'):
+            if 'No such' in res['error']['message']:
+                return error_json(1005)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    return make_response('', 200)
+
 @app.route('/@<string:acct>')
 @login_check
 def user_detail(acct: str):
@@ -714,39 +746,26 @@ def user_detail(acct: str):
     
     untilId = request.args.get('untilId')
 
-    r = http_session.post(f'https://{session["host"]}/api/users/show', json={'i': session['misskey_token'], 'username': username, 'host': host})
-    if r.status_code != 200:
-        try:
-            res = r.json()
-            if res.get('error'):
-                if 'No such' in res['error']['message']:
-                    return make_response('ユーザーが削除されているか、存在しません。', 404)
-                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
-        except:
-            return make_response('Fetch user failed (JSON Decode Error)', 500)
+    ok, res, r = api(f'/api/users/show', json={'i': session['misskey_token'], 'username': username, 'host': host})
+    if not ok:
+        if res.get('error'):
+            if 'No such' in res['error']['message']:
+                return make_response('ユーザーが削除されているか、存在しません。', 404)
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
     
-    try:
-        user = r.json()
-    except:
-        return make_response('Read user failed (JSON Decode Error)', 500)
+    user = res
     
     notes_payload = {'i': session['misskey_token'], 'userId': user['id'], 'limit': 11, 'includeReplies': False}
 
     if untilId:
         notes_payload['untilId'] = untilId
 
-    r2 = http_session.post(f'https://{session["host"]}/api/users/notes', json=notes_payload)
-    if r2.status_code != 200:
-        try:
-            res = r2.json()
-            if res.get('error'):
-                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
-        except:
-            return make_response('Fetch user notes failed (JSON Decode Error)', 500)
-    try:
-        notes = r2.json()
-    except:
-        return make_response('Read user notes failed (JSON Decode Error)', 500)
+    ok, res, r2 = http_session.post(f'https://{session["host"]}/api/users/notes', json=notes_payload)
+    if not ok:
+        if res.get('error'):
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+    
+    notes = res
     
     return render_template('app/user_detail.html',
         user=user,
@@ -756,10 +775,78 @@ def user_detail(acct: str):
         emoji_convert=emoji_convert
     )
 
+@app.route('/api/note_delete', methods=['GET'])
+@login_check
+def api_note_delete():
+    note_id = request.args.get('noteId')
+    if not note_id:
+        return error_json(1, 'noteId is required')
+    
+    ok, res, r = api(f'/api/notes/delete', json={'i': session['misskey_token'], 'noteId': note_id})
+    if not ok:
+        if res.get('error'):
+            if 'No such' in res['error']['message']:
+                return error_json(1005)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    if note_id in session['i']['pinnedNoteIds']:
+        session['i'] = fetch_i(session['host'], session['misskey_token'])
+
+    return make_response('', 200)
+
+@app.route('/api/note_pin', methods=['GET'])
+def api_note_pin():
+    note_id = request.args.get('noteId')
+    if not note_id:
+        return error_json(1, 'noteId is required')
+    
+    ok, res, r = api(f'/api/i/pin', json={'i': session['misskey_token'], 'noteId': note_id})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_NOTE':
+                return error_json(1000)
+            if res['error']['code'] == 'ALREADY_PINNED':
+                return error_json(1006)
+            if 'No such' in res['error']['message']:
+                return error_json(1000)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    session['i'] = fetch_i(session['host'], session['misskey_token'])
+    return make_response('', 200)
+
+@app.route('/api/note_unpin', methods=['GET'])
+def api_note_unpin():
+    note_id = request.args.get('noteId')
+    if not note_id:
+        return error_json(1, 'noteId is required')
+    
+    ok, res, r = api(f'/api/i/unpin', json={'i': session['misskey_token'], 'noteId': note_id})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_NOTE':
+                return error_json(1000)
+            if 'No such' in res['error']['message']:
+                return error_json(1000)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    session['i'] = fetch_i(session['host'], session['misskey_token'])
+    return make_response('', 200)
+
 @app.route('/mediaproxy/<path:path>')
 def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
 
     path = base64.urlsafe_b64decode(path.encode()).decode()
+
+    # 正規化
+    try:
+        parsed_url = urllib.parse.urlparse(path)
+    except:
+        return make_response('Bad URL', 500)
+    
+    path = parsed_url._replace(path=parsed_url.path.replace('//', '/')).geturl()
+    if '//' in path[len('http://'):]:
+        raise Exception('E')
+
 
     cache_name = hashlib.sha256(((f'hq_{MEDIAPROXY_IMAGECOMP_LEVEL_HQ}' if hq else f'q_{MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL}') + ('_jpeg' if jpeg else '')  + re.sub(r'[^a-zA-Z0-9\.]', '_', path)).encode()).hexdigest()
     if os.path.exists('mediaproxy_cache/' + cache_name):
