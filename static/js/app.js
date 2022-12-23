@@ -10,7 +10,12 @@ var ERROR_IDS = {
     1004: 'レート制限中です。しばらくしてから再度お試しください',
     1005: 'ユーザーが見つかりません',
     1006: 'すでにピン留めされています',
-    1007: 'リノート対象が見つかりません'
+    1007: 'リノート対象が見つかりません',
+    1008: 'すでにフォローしています',
+    1009: 'あなたはこのユーザーをブロックしています',
+    1010: 'このユーザーはあなたをブロックしています',
+    1011: 'すでにブロックしています',
+    1012: 'すでにミュートしています',
 }
 
 var NOTE_VISIBILITY = {
@@ -58,7 +63,7 @@ function do_renote(e, id) {
 
 function do_renote2(e, id) {
     var xhr = new XMLHttpRequest();
-    api_request('/api/renote?noteId=' + id, function (status, body) {
+    api_request('/api/notes/renote?noteId=' + id, function (status, body) {
         if (status == 200) {
             e.innerHTML = 'リノートしました';
             e.disabled = true;
@@ -75,7 +80,7 @@ function do_renote2(e, id) {
 
 function undo_renote(e, id) {
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/api/undo_renote?noteId=' + id);
+    xhr.open('GET', '/api/notes/undo_renote?noteId=' + id);
     xhr.onload = function () {
         if (xhr.status == 200) {
             e.innerHTML = 'リノート解除しました';
@@ -159,7 +164,7 @@ function reaction(noteId) {
     searchButton.onclick = function (e) {
         var value = searchBox.value.trim();
         if (value) {
-            api_request('/api/reaction_search?noteId=' + noteId + '&q=' + encodeURI(value), function (status, body) {
+            api_request('/api/reaction/search?noteId=' + noteId + '&q=' + encodeURI(value), function (status, body) {
                 if (status == 200) {
                     presetPickerContainerEl.style.display = 'none';
                     pickerContainerEl.style.display = 'block';
@@ -173,7 +178,7 @@ function reaction(noteId) {
 }
 
 function fetchNote(note_id) {
-    api_request('/api/note_fetch?noteId=' + note_id, function (status, body) {
+    api_request('/api/notes/fetch?noteId=' + note_id, function (status, body) {
         if (status == 200) {
             var note = JSON.parse(body);
             return note;
@@ -210,7 +215,7 @@ var emojiButtonHandler = function (e) {
     var reactionRootEl =  e.target; // document.getElementById('note-reaction-element-root-' + reactionElRootId);
     //alert('noteId: ' + noteId + '\n' + 'reaction: ' + reaction + '\n' + 'reactionType: ' + reactionType);
     if (reactionRootEl.className.indexOf('note-reaction-selected') === -1) {
-        api_request('/api/reaction?noteId=' + noteId + '&reaction=' + encodeURI(reaction) + '&type=' + reactionType, function (status, body) {
+        api_request('/api/notes/reaction?noteId=' + noteId + '&reaction=' + encodeURI(reaction) + '&type=' + reactionType, function (status, body) {
             if (status == 200) {
                 document.getElementById(noteId + '-reactions').innerHTML = body;
                 // DOM解析を待つ
@@ -218,7 +223,7 @@ var emojiButtonHandler = function (e) {
             }
         });
     } else {
-        api_request('/api/reaction?noteId=' + noteId + '&reaction=&type=none', function (status, body) {
+        api_request('/api/notes/reaction?noteId=' + noteId + '&reaction=&type=none', function (status, body) {
             if (status == 200) {
                 document.getElementById(noteId + '-reactions').innerHTML = body;
                 // DOM解析を待つ
@@ -233,7 +238,7 @@ var emojiPickerButtonHandler = function (e) {
     var reaction = e.target.getAttribute('data-reaction-content');
     var reaction_type = e.target.getAttribute('data-reaction-type');
 
-    api_request('/api/reaction?noteId=' + noteId + '&reaction=' + encodeURI(reaction) + '&type=' + reaction_type, function (status, body) {
+    api_request('/api/notes/reaction?noteId=' + noteId + '&reaction=' + encodeURI(reaction) + '&type=' + reaction_type, function (status, body) {
         if (status == 200) {
             document.getElementById(noteId + '-reactions').innerHTML = body;
             document.getElementById('note-reaction-picker-' + noteId).style.display = 'none';
@@ -249,7 +254,7 @@ var noteMenuHandler = function (e) {
     switch (selectedMenu) {
         case 'delete':
             if (window.confirm('本当に削除しますか？') === true) {
-                api_request('/api/note_delete?noteId=' + noteId, function (status, body) {
+                api_request('/api/notes/delete?noteId=' + noteId, function (status, body) {
                     if (status == 200) {
                         var noteEl = document.getElementById('note-' + noteId);
                         noteEl.parentNode.removeChild(noteEl);
@@ -260,7 +265,7 @@ var noteMenuHandler = function (e) {
             break;
         
         case 'pin':
-            api_request('/api/note_pin?noteId=' + noteId, function (status, body) {
+            api_request('/api/notes/pin?noteId=' + noteId, function (status, body) {
                 if (status == 200) {
                     alert('ピン留めしました。');
                 }
@@ -269,7 +274,7 @@ var noteMenuHandler = function (e) {
 
         case 'unpin':
             if (window.confirm('本当にピン留めを解除しますか？') === true) {
-                api_request('/api/note_unpin?noteId=' + noteId, function (status, body) {
+                api_request('/api/notes/unpin?noteId=' + noteId, function (status, body) {
                     if (status == 200) {
                         alert('ピン留めを解除しました。');
                     }
@@ -284,13 +289,93 @@ var noteMenuHandler = function (e) {
             var content = window.prompt('通報理由を入力してください。');
             if (content && content.trim() != '') {
                 var text = 'Note: ' + uri + '\n-----\n' + content.trim();
-                api_request('/api/report?userId=' + userId + '&comment=' + encodeURI(text), function (status, body) {
+                api_request('/api/users/report?userId=' + userId + '&comment=' + encodeURI(text), function (status, body) {
                     if (status == 200) {
                         alert('通報しました。');
                     }
                 });
             }
             break;
+    }
+    e.target.selectedIndex = 0;
+}
+
+var followButtonHandler = function (e) {
+    var userId = e.target.getAttribute('data-user-id');
+    var state = e.target.getAttribute('data-follow-state')==='true' ? true : false;
+    var followBtnEl = document.getElementById('user-follow-button-' + userId);
+    if (state) {
+        api_request('/api/users/unfollow?userId=' + userId, function (status, body) {
+            if (status == 200) {
+                followBtnEl.innerHTML = 'フォロー';
+                followBtnEl.setAttribute('data-follow-state', 'false');
+            }
+        });
+    } else {
+        api_request('/api/users/follow?userId=' + userId, function (status, body) {
+            if (status == 200) {
+                followBtnEl.innerHTML = 'フォロー解除';
+                followBtnEl.setAttribute('data-follow-state', 'true');
+            }
+        });
+    }
+}
+
+var userActionSelectHandler = function (e) {
+    // USER_INFO は user_detail で埋め込んでいる
+    var userId = USER_INFO.id;
+    var selectedMenu = e.target.value;
+    switch (selectedMenu) {
+        case 'block':
+            if (window.confirm('本当にブロックしますか？') === true) {
+                api_request('/api/users/block?userId=' + userId, function (status, body) {
+                    if (status == 200) {
+                        alert('ブロックしました。');
+                    }
+                });
+            }
+            break;
+        
+        case 'unblock':
+            if (window.confirm('本当にブロックを解除しますか？') === true) {
+                api_request('/api/users/unblock?userId=' + userId, function (status, body) {
+                    if (status == 200) {
+                        alert('ブロックを解除しました。');
+                    }
+                });
+            }
+            break;
+        
+        case 'mute':
+            if (window.confirm('本当にミュートしますか？') === true) {
+                api_request('/api/users/mute?userId=' + userId, function (status, body) {
+                    if (status == 200) {
+                        alert('ミュートしました。');
+                    }
+                });
+            }
+            break;
+        
+        case 'unmute':
+            if (window.confirm('本当にミュートを解除しますか？') === true) {
+                api_request('/api/users/unmute?userId=' + userId, function (status, body) {
+                    if (status == 200) {
+                        alert('ミュートを解除しました。');
+                    }
+                });
+            }
+            break;
+        
+        case 'report':
+            var content = window.prompt('通報理由を入力してください。');
+            if (content && content.trim() != '') {
+                var text = 'User: ' + USER_INFO.uri + '\n-----\n' + content.trim();
+                api_request('/api/users/report?userId=' + userId + '&comment=' + encodeURI(text), function (status, body) {
+                    if (status == 200) {
+                        alert('通報しました。');
+                    }
+                });
+            }
     }
     e.target.selectedIndex = 0;
 }
@@ -323,6 +408,20 @@ function registerNoteMenuHandler() {
     }
 }
 
+function registerFollowButtonHandler() {
+    var followBtns = document.getElementsByClassName('user-follow-button');
+    for (var i = 0; i < followBtns.length; i++) {
+        followBtns[i].onclick = followButtonHandler;
+    }
+}
+
+function registerUserActionSelectHandler() {
+    var userActionSelects = document.getElementsByClassName('user-action-select');
+    for (var i = 0; i < userActionSelects.length; i++) {
+        userActionSelects[i].onchange = userActionSelectHandler;
+    }
+}
+
 window.addEventListener('load', function () {
     if (!document.getElementsByClassName) {
         alert('getElementsByClassName is not supported.');
@@ -330,6 +429,8 @@ window.addEventListener('load', function () {
     }
     registerEmojiButtonHandler();
     registerNoteMenuHandler();
+    registerFollowButtonHandler();
+    registerUserActionSelectHandler();
 
     var noteFormVisibility = document.getElementById('note-form-select-visibility');
     var noteFormLocalOnly = document.getElementById('nf_localonly');

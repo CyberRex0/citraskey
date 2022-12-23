@@ -104,7 +104,8 @@ def make_emoji2image_url(target: str):
 def emoji_convert(tx: str, emojis: List[dict]):
     for emoji in emojis:
         tx = tx.replace(f':{emoji["name"]}:', f'<img src="{make_mediaproxy_url(emoji["url"])}" class="emoji-in-text">')
-    
+    if not tx:
+        return tx
     parsedUemojis = demoji.findall(tx)
     for k in parsedUemojis.keys():
         tx = tx.replace(k, f'<img src="{make_emoji2image_url(k)}" class="emoji-in-text">')
@@ -154,7 +155,7 @@ def convert_tag(text: str):
     return re.sub(r'(^|\s)#(\w+)', r'\1<a href="/search?tag=\2">#\2</a>', text)
 
 def mention2link(text: str):
-    return re.sub(r'@([0-9a-zA-Z\._@]+)', r'<a href="/@\1">@\1</a>', text)
+    return re.sub(r'@([0-9a-zA-Z\-\._@]+)', r'<a href="/@\1">@\1</a>', text)
 
 def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
     if nest_count < 0:
@@ -338,13 +339,15 @@ def auth_start():
             MisskeyPermissions.READ_NOTIFICATIONS,
             MisskeyPermissions.READ_REACTIONS,
             MisskeyPermissions.READ_MESSAGING,
+            MisskeyPermissions.READ_FOLLOWING,
 
             MisskeyPermissions.WRITE_ACCOUNT,
             MisskeyPermissions.WRITE_DRIVE,
             MisskeyPermissions.WRITE_NOTES,
             MisskeyPermissions.WRITE_REACTIONS,
             MisskeyPermissions.WRITE_VOTES,
-            MisskeyPermissions.WRITE_MESSAGING
+            MisskeyPermissions.WRITE_MESSAGING,
+            MisskeyPermissions.WRITE_FOLLOWING
 
         ]]),
         'callback': callback_url
@@ -566,7 +569,7 @@ def settings():
 
         return render_template('app/settings.html', settings=row, updated=True)
 
-@app.route('/api/post', methods=['POST'])
+@app.route('/api/notes/create', methods=['POST'])
 @login_check
 def api_post():
     upload_file = request.files.get('image')
@@ -619,7 +622,7 @@ def api_post():
 
     return redirect(request.headers['Referer'])
 
-@app.route('/api/renote', methods=['GET'])
+@app.route('/api/notes/renote', methods=['GET'])
 @login_check
 def api_renote():
     note_id = request.args.get('noteId')
@@ -639,7 +642,7 @@ def api_renote():
     
     return make_response('', 200)
 
-@app.route('/api/undo_renote', methods=['GET'])
+@app.route('/api/notes/undo_renote', methods=['GET'])
 @login_check
 def api_undo_renote():
     note_id = request.args.get('noteId')
@@ -659,7 +662,7 @@ def api_undo_renote():
     
     return make_response('', 200)
 
-@app.route('/api/reaction', methods=['GET'])
+@app.route('/api/notes/reaction', methods=['GET'])
 @login_check
 def api_reaction():
     note_id = request.args.get('noteId')
@@ -719,7 +722,7 @@ def note_detail(note_id: str):
 
     return render_template('app/note_detail.html', note=note, render_note_element=render_note_element)
 
-@app.route('/api/note_fetch', methods=['GET'])
+@app.route('/api/notes/fetch', methods=['GET'])
 def api_note_fetch():
     note_id = request.args.get('noteId')
     if not note_id:
@@ -745,7 +748,7 @@ def api_note_fetch():
     res.headers['Content-Type'] = 'application/json'
     return res
 
-@app.route('/api/reaction_search', methods=['GET'])
+@app.route('/api/reaction/search', methods=['GET'])
 @login_check
 def api_reaction_search():
     note_id = request.args.get('noteId')
@@ -772,7 +775,7 @@ def api_reaction_search():
 
     return render_reaction_picker_element(note_id, suggested_reactions[:10])
 
-@app.route('/api/report', methods=['GET'])
+@app.route('/api/users/report', methods=['GET'])
 def api_note_report():
     userId = request.args.get('userId')
     comment = request.args.get('comment')
@@ -785,6 +788,106 @@ def api_note_report():
     if not ok:
         if res.get('error'):
             if 'No such' in res['error']['message']:
+                return error_json(1005)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    return make_response('', 200)
+
+@app.route('/api/users/follow', methods=['GET'])
+def api_user_follow():
+    userId = request.args.get('userId')
+    if not userId:
+        return error_json(1, 'userId is required')
+    
+    ok, res, r = api('/api/following/create', json={'i': session['misskey_token'], 'userId': userId})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return error_json(1005)
+            if res['error']['code'] == 'ALREADY_FOLLOWING':
+                return error_json(1008)
+            if res['error']['code'] == 'BLOCKING':
+                return error_json(1009)
+            if res['error']['code'] == 'BLOCKEE':
+                return error_json(1010)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    return make_response('', 200)
+
+@app.route('/api/users/unfollow', methods=['GET'])
+def api_user_unfollow():
+    userId = request.args.get('userId')
+    if not userId:
+        return error_json(1, 'userId is required')
+    
+    ok, res, r = api('/api/following/delete', json={'i': session['misskey_token'], 'userId': userId})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return error_json(1005)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    return make_response('', 200)
+
+@app.route('/api/users/block', methods=['GET'])
+def api_user_block():
+    userId = request.args.get('userId')
+    if not userId:
+        return error_json(1, 'userId is required')
+    
+    ok, res, r = api('/api/blocking/create', json={'i': session['misskey_token'], 'userId': userId})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return error_json(1005)
+            if res['error']['code'] == 'ALREADY_BLOCKING':
+                return error_json(1011)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    return make_response('', 200)
+
+@app.route('/api/users/unblock', methods=['GET'])
+def api_user_unblock():
+    userId = request.args.get('userId')
+    if not userId:
+        return error_json(1, 'userId is required')
+    
+    ok, res, r = api('/api/blocking/delete', json={'i': session['misskey_token'], 'userId': userId})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return error_json(1005)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    return make_response('', 200)
+
+@app.route('/api/users/mute', methods=['GET'])
+def api_user_mute():
+    userId = request.args.get('userId')
+    if not userId:
+        return error_json(1, 'userId is required')
+    
+    ok, res, r = api('/api/mute/create', json={'i': session['misskey_token'], 'userId': userId})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return error_json(1005)
+            if res['error']['code'] == 'ALREADY_MUTING':
+                return error_json(1012)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    return make_response('', 200)
+
+@app.route('/api/users/unmute', methods=['GET'])
+def api_user_unmute():
+    userId = request.args.get('userId')
+    if not userId:
+        return error_json(1, 'userId is required')
+    
+    ok, res, r = api('/api/mute/delete', json={'i': session['misskey_token'], 'userId': userId})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
                 return error_json(1005)
             return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
     
@@ -834,7 +937,7 @@ def user_detail(acct: str):
         mention2link=mention2link
     )
 
-@app.route('/api/note_delete', methods=['GET'])
+@app.route('/api/notes/delete', methods=['GET'])
 @login_check
 def api_note_delete():
     note_id = request.args.get('noteId')
@@ -853,7 +956,7 @@ def api_note_delete():
 
     return make_response('', 200)
 
-@app.route('/api/note_pin', methods=['GET'])
+@app.route('/api/notes/pin', methods=['GET'])
 def api_note_pin():
     note_id = request.args.get('noteId')
     if not note_id:
@@ -873,7 +976,7 @@ def api_note_pin():
     session['i'] = fetch_i(session['host'], session['misskey_token'])
     return make_response('', 200)
 
-@app.route('/api/note_unpin', methods=['GET'])
+@app.route('/api/notes/unpin', methods=['GET'])
 def api_note_unpin():
     note_id = request.args.get('noteId')
     if not note_id:

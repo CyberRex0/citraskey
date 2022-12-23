@@ -9,7 +9,16 @@
             <a href="/">ホーム</a> | <a href="javascript:history.back()">←戻る</a>
         </p>
 
+        {% set user_uri = user['uri'] or ('https://' + session['host'] + '/users/' + user['id']) %}
         {% set acct = user['username'] + ('@' + user['host'] if user['host'] else '') %}
+
+        <script>
+            var USER_INFO = {
+                uri: '{{ user_uri }}',
+                acct: '{{ acct }}',
+                id: '{{ user["id"] }}',
+            }
+        </script>
 
         <div id="profile">
             <table class="table-flex">
@@ -17,7 +26,7 @@
                     <tr>
                         <td><img class="profile-icon" src="{{ make_mediaproxy_url(user['avatarUrl']) }}"></td>
                         <td>
-                            {{ emoji_convert(user['name'], user['emojis']) | safe }}
+                            {{ emoji_convert(user['name'], user['emojis']) or user['username'] | safe }}
                             {% if user['isAdmin'] %}
                                 <span class="user-flag user-flag-admin">Admin</span>
                             {% endif %}
@@ -42,8 +51,29 @@
                     </tr>
                 </tbody>
             </table>
+            <div style="float: right;">
+                {% if user['id'] != session['i']['id'] %}
+                <button id="user-follow-button-{{ user['id'] }}" class="user-follow-button" data-user-id="{{ user['id'] }}" data-follow-state="{{ user['isFollowing'].__str__().lower() }}">フォロー{{ '解除' if user['isFollowing'] else '' }}</button>
+                {% endif %}
+                <select id="user-action-{{ user['id'] }}" class="user-action-select">
+                    <option disabled selected>選択...</option>
+                    {% if user['id'] != session['i']['id'] %}
+                        {% if user['isBlocking'] %}
+                            <option value="unblock">ブロック解除</option>
+                        {% else %}
+                            <option value="block">ブロック</option>
+                        {% endif %}
+                        {% if user['isMuted'] %}
+                            <option value="unmute">ミュート解除</option>
+                        {% else %}
+                            <option value="mute">ミュート</option>
+                        {% endif %}
+                        <option value="report">通報</option>
+                    {% endif %}
+                </select>
+            </div>
             <p style="font-size: 9pt">
-                <strong>{{ user['notesCount'] }}</strong> 投稿 &nbsp; <strong>{{ user['followingCount'] }}</strong> フォロー &nbsp; <strong>{{ user['followersCount'] }} フォロワー</strong>
+                <strong>{{ user['notesCount'] }}</strong> 投稿 &nbsp; <strong>{{ user['followingCount'] }}</strong> フォロー &nbsp; <strong>{{ user['followersCount'] }}</strong> フォロワー
             </p>
             {% if user['description'] %}
                 <p class="user-description">
@@ -53,16 +83,25 @@
         </div>
 
         <br>
+        {% if request.args.get('untilId') %}
+            <center>
+                <a href="{{ request.base_url }}">最新を見る</a>
+            </center>
+            <hr size="1">
+        {% endif %}
         {% autoescape false %}
             {% for note in notes %}
                 {{ render_note_element(note, {}) }}
             {% endfor %}
         {% endautoescape %}
+
+        {% if notes.__len__() > 1 %}
         <hr size="1">
         <center>
             <a href="/@{{ acct }}?untilId={{ notes[-1]['id'] }}">もっと見る
             </a>
         </center>
+        {% endif %}
 
         {% include "app/components/footer.html" %}
     </body>
