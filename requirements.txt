@@ -6,4 +6,4 @@ qrcode
 requests
 Pillow
 flask-session
-magic
+file-magic
