@@ -26,7 +26,7 @@
                     <tr>
                         <td><img class="profile-icon" src="{{ make_mediaproxy_url(user['avatarUrl']) }}"></td>
                         <td>
-                            {{ emoji_convert(user['name'], user['emojis']) or user['username'] | safe }}
+                            {% autoescape false %}{{ emoji_convert(user['name'], user['emojis']) or user['username'] }}{% endautoescape %}
                             {% if user['isAdmin'] %}
                                 <span class="user-flag user-flag-admin">Admin</span>
                             {% endif %}
@@ -72,6 +72,7 @@
                     {% endif %}
                 </select>
             </div>
+            <br>
             <p style="font-size: 9pt">
                 <strong>{{ user['notesCount'] }}</strong> 投稿 &nbsp; <strong>{{ user['followingCount'] }}</strong> フォロー &nbsp; <strong>{{ user['followersCount'] }}</strong> フォロワー
             </p>

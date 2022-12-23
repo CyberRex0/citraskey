@@ -9,14 +9,25 @@
         <br>
         <a href="/">ホーム</a>
         <br>
+        {% if request.args.get('untilId') %}
+            <center>
+                <a href="/notifications">最新の通知</a>
+            </center>
+            <hr size="1">
+        {% endif %}
         {% for n in notifications %}
-            <div>
+            <div class="notification">
                 {% autoescape false %}
                     {{ render_notification(n) }}
                 {% endautoescape %}
             </div>
-            <hr>
+            <hr size="1">
         {% endfor %}
+        {% if notifications.__len__() > 1 %}
+            <center>
+                <a href="/notifications?untilId={{ notifications[-1]['id'] }}">もっと見る</a>
+            </center>
+        {% endif %}
         {% include "app/components/footer.html" %}
     </body>
 </html>

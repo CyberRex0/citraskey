@@ -28,6 +28,13 @@
     font-size: initial !important;
 }
 
+.note-content {
+    margin-left: 2px;
+    margin-right: 2px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
 .emoji-in-text {
     max-width: 16px;
 }
@@ -125,4 +132,32 @@
 
 .note-header-name {
     line-height: 0.9;
+}
+
+.note-poll {
+    border: 1px solid #777777;
+}
+
+.tab {
+    border: 1px solid #777777;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    text-decoration: none;
+    font-size: 10.5pt;
+    color: #888888;
+}
+
+.tab:visited {
+    color: #888888;
+}
+
+.tab-active {
+    background-color: #333333;
+    color: #dddddd !important;
+}
+
+.notification {
+    margin-top: 4px;
+    margin-bottom: 4px;
 }

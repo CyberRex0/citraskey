@@ -12,6 +12,14 @@
             <a href="/notifications"><img src="/static/image/notification.png" width="24"/></a>
             &nbsp;
             <a href="/settings"><img src="/static/image/settings.png" width="24"></a>
+            <br>
+            <div id="timeline-selector">
+                <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='home' }}" href="/?tl=home">ホーム</a>
+                <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='local' }}" href="/?tl=local">ローカル</a>
+                <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='hybrid' }}" href="/?tl=hybrid">ソーシャル</a>
+                <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='global' }}" href="/?tl=global">グローバル</a>
+                <a href="javascript:scrollToElementX(document.getElementById('bottom-hr'))" style="float:right">▼</a>
+            </div>
         </div>
         {% if request.args.get('untilId') %}
             <center>
@@ -34,7 +42,8 @@
             {% endif %}
         {% endfor %}
         {% endautoescape %}
-        <hr size="1">
+        <hr id="bottom-hr" size="1">
+        <a style="float:right" href="javascript:scrollToElementX(document.getElementById('timeline-selector'))">▲</a>
         <center>
             <a href="/?untilId={{ notes[-1]['id'] }}">もっと見る</a>
         </center>

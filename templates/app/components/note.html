@@ -1,5 +1,7 @@
 {% autoescape false %}
-{% set renote = (note['renote'] and not note['text']) %}
+{% set quote = note['renote'] and note['text'] %}
+{% set renote = (note['renote'] and not note['text'] and not note['files']) %}
+{% set private = note['visibility'] == 'followers' or note['visibility'] == 'specified' %}
 <div class="note {{ 'note-quote' if option_data and option_data['quote'] }} {{ 'note-renote' if renote else 'note-normal' }}" id="note-{{ note['id'] }}" data-user-id="{{ note['user']['id'] }}" data-note-uri="https://{{ user_host }}/notes/{{ note['id'] }}" data-note-remote-uri="{{ note['uri'] }}">
     {% set acct = note['user']['username'] + ('@' + note['user']['host'] if note['user']['host'] else '') %}
     <div class="note-header">
@@ -19,9 +21,17 @@
     </div>
     <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['emojis']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
 
-    <div style="display: {{ 'none' if note['cw'] else 'block' }}" id="note-content-{{ note['id'] }}">
+    <div style="display: {{ 'none' if note['cw'] else 'block' }}" class="note-content" id="note-content-{{ note['id'] }}">
         {{ mention2link(renderURL(emoji_convert(markdown_render(convert_tag(cleantext(note['text'] or ''))), note['emojis']))) }}
     </div>
+
+    {% if not quote %}
+        {% if note['poll'] %}
+            <div class="note-poll" id="note-poll-{{ note['id'] }}">
+                {{ render_poll(note['id'], note['poll']) }}
+            </div>
+        {% endif %}
+    {% endif %}
 
     {% if note['files'] %}
     <div>
@@ -32,7 +42,7 @@
     {% endif %}
 
     {% if note['renote'] %}
-        {{ render_note_element(note['renote'], {'quote': note['renote'] and note['text']}, nest_count - 1) }}
+        {{ render_note_element(note['renote'], {'quote': quote}, nest_count - 1) }}
     {% endif %}
 
     <div id="{{ note['id'] }}-reactions">
@@ -42,8 +52,8 @@
     <div>
         {% if not renote %}
         <button onclick="reply('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})">{{ note['repliesCount'] }} 返信</button>
-        <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}> {{ note['renoteCount'] }} リノート</button>
-        <button onclick="quote('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})" {{ 'disabled' if note['visibility'] == 'followers' or note['visibility'] == 'specified' }}>引用</button>
+        <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if private else '' }}> {{ note['renoteCount'] }} リノート</button>
+        <button onclick="quote('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})" {{ 'disabled' if private else '' }}>引用</button>
         <button onclick="reaction('{{ note['id'] }}')">絵文字</button>
         <button onclick="showSelectMenu('{{ note['id'] }}')" style="float: right;">...</button>
         <br>

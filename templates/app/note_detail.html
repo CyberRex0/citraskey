@@ -11,6 +11,16 @@
         {% autoescape false %}
             {{ render_note_element(note, {}) }}
         {% endautoescape %}
+        {% if replies %}
+        <hr size="1">
+        <div style="margin-left: 6px; margin-right: 6px;">
+        {% autoescape false %}
+            {% for reply in replies %}
+                {{ render_note_element(reply, {}) }}
+            {% endfor %}
+        {% endautoescape %}
+        </div>
+        {% endif %}
         {% include "app/components/footer.html" %}
     </body>
 </html>

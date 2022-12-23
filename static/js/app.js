@@ -16,6 +16,7 @@ var ERROR_IDS = {
     1010: 'このユーザーはあなたをブロックしています',
     1011: 'すでにブロックしています',
     1012: 'すでにミュートしています',
+    1013: 'すでに投票しています'
 }
 
 var NOTE_VISIBILITY = {
@@ -28,7 +29,6 @@ function noteContentVToggle(id) {
     var noteContent = document.getElementById('note-content-' + id);
     noteContent.style.display = (noteContent.style.display=='none') ? 'block' : 'none';
 }
-
 
 function api_request(url, callback) {
     var xhr = new XMLHttpRequest();
@@ -196,6 +196,12 @@ function scrollToElement(el) {
     var px = window.pageXOffset + clientRect.left;
     var py = window.pageYOffset + clientRect.top;
     window.scrollTo(px, py);
+}
+
+function scrollToElementX(el) {
+    var clientRect = el.getBoundingClientRect();
+    var py = window.pageYOffset + clientRect.top;
+    window.scrollTo(0, py);
 }
 
 function loadNoteFromConfig() {
@@ -380,6 +386,22 @@ var userActionSelectHandler = function (e) {
     e.target.selectedIndex = 0;
 }
 
+var notePollChoiceHandler = function (e) {
+    var noteId = e.target.getAttribute('data-note-id');
+    var choiceIndex = e.target.getAttribute('data-choice-index');
+    var pollAreaEl = document.getElementById('note-poll-' + noteId);
+
+    if (window.confirm('投票しますか？')) {
+        api_request('/api/notes/poll?noteId=' + noteId + '&index=' + choiceIndex, function (status, body) {
+            if (status == 200) {
+                pollAreaEl.innerHTML = body;
+            }
+        });
+    } else {
+        e.preventDefault();
+    }
+}
+
 function registerPickerReactionHandlerById(noteId) {
     var pickerReactionButtons = document.getElementsByClassName('note-reaction-picker-child-' + noteId);
     for (var i = 0; i < pickerReactionButtons.length; i++) {
@@ -422,6 +444,13 @@ function registerUserActionSelectHandler() {
     }
 }
 
+function registerNotePollChoiceHandler() {
+    var notePollChoices = document.getElementsByClassName('note-poll-choice');
+    for (var i = 0; i < notePollChoices.length; i++) {
+        notePollChoices[i].onclick = notePollChoiceHandler;
+    }
+}
+
 window.addEventListener('load', function () {
     if (!document.getElementsByClassName) {
         alert('getElementsByClassName is not supported.');
@@ -431,6 +460,7 @@ window.addEventListener('load', function () {
     registerNoteMenuHandler();
     registerFollowButtonHandler();
     registerUserActionSelectHandler();
+    registerNotePollChoiceHandler();
 
     var noteFormVisibility = document.getElementById('note-form-select-visibility');
     var noteFormLocalOnly = document.getElementById('nf_localonly');

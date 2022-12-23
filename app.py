@@ -37,7 +37,7 @@ cur = db.cursor()
 cur.execute('CREATE TABLE IF NOT EXISTS auth_session (id TEXT, mi_session_id TEXT, misskey_token TEXT, host TEXT, acct TEXT, callback_auth_code TEXT, ready INTEGER, auth_url TEXT, auth_qr_base64 TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS users (id TEXT, acct TEXT, misskey_token TEXT, host TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS shortlink (sid TEXT, url TEXT)')
-cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER)')
+cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER, timeline TEXT)')
 cur.close()
 db.commit()
 
@@ -58,7 +58,7 @@ SYS_DIRS = ['emoji_cache', 'mediaproxy_cache']
 MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL = '20'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ = '2'
 
-URL_REGEX = re.compile(r'(https?://[\w!?/+\-_~;.,*&@#$%()\'=:\+[\]]+)')
+URL_REGEX = re.compile(r'(?!.*(?:"|>))(https?://[\w!?/+\-_~;.,*&@#$%()\'=:]+)')
 
 NOTIFICATION_TYPES = {
     'follow': 'にフォローされました',
@@ -145,13 +145,19 @@ def render_reaction_picker_element(note_id: str, reactions: List[dict]):
         reactionEls.append(f'<span><img src="{make_mediaproxy_url(r["url"], jpeg=True)}" class="emoji-in-text note-reaction-available note-reaction-picker-child-{note_id}" data-note-id="{note_id}" data-reaction-content=":{r["name"]}:" data-reaction-type="custom"></span>')
     return ''.join(reactionEls)
 
+def markdown_render(text: str):
+    t = markdown.markdown(text)
+    if t.startswith('<p>'):
+        t = t[3:]
+    if t.endswith('</p>'):
+        t = t[:-4]
+    return t
+
 def cleantext(text: str):
     return text
-    #return re.sub(r'^<p>(.*)</p>$', '\1', text)
 
 def convert_tag(text: str):
     # inline text
-
     return re.sub(r'(^|\s)#(\w+)', r'\1<a href="/search?tag=\2">#\2</a>', text)
 
 def mention2link(text: str):
@@ -164,7 +170,7 @@ def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
         'app/components/note.html',
         note=note,
         option_data=option_data,
-        markdown_render=markdown.markdown,
+        markdown_render=markdown_render,
         emoji_convert=emoji_convert,
         reactions_count_html=reactions_count_html,
         enumerate=enumerate,
@@ -182,14 +188,12 @@ def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
         user_host=session['host'],
         nest_count=nest_count,
         str=str,
+        render_poll=render_poll,
         PRESET_REACTIONS=PRESET_REACTIONS
     )
 
 def renderURL(src):
-    urls = URL_REGEX.findall(src)
-    for url in urls:
-        src = src.replace(url, '<a href="' + url + '" target="_blank">' + url + '</a>')
-    return src
+    return URL_REGEX.sub(r'<a href="\1">\1</a>', src)
 
 def render_notification(n: dict):
     ntype = n['type']
@@ -206,7 +210,7 @@ def render_notification(n: dict):
         user_name = n["user"]["name"]
         user_acct_name = n["user"]["username"]
         user_name_emojis = n["user"]["emojis"]
-        htm = f'<img src="{make_mediaproxy_url(user_avatar_url)}" class="icon-in-note"> {emoji_convert(user_name or user_acct_name, user_name_emojis)} さん{ntypestring}<br>'
+        htm = f'<img src="{make_mediaproxy_url(user_avatar_url)}" width="18"> {emoji_convert(user_name or user_acct_name, user_name_emojis)} さん{ntypestring}<br>'
     else:
         #user_avatar_url = n["note"]["user"]["avatarUrl"]
         #user_name = n["note"]["user"]["name"]
@@ -221,6 +225,36 @@ def render_notification(n: dict):
             htm += render_note_element(n['note']['renote'], {})
 
     return htm
+
+def render_poll(note_id: str, poll: dict):
+    disabled = False
+    status = ''
+    if poll['expiresAt']:
+        dt = datetime.datetime.strptime(poll['expiresAt'], '%Y-%m-%dT%H:%M:%S.%fZ')
+        if dt < datetime.datetime.utcnow():
+            disabled = True
+            status = '投票終了'
+        else:
+            d = dt - datetime.datetime.utcnow()
+            status = f'あと{d.days}日{d.seconds // 3600}時間{d.seconds % 3600 // 60}分'
+
+    if not poll['multiple']:
+        for p in poll['choices']:
+            if p['isVoted']:
+                disabled = True
+                break
+    
+    poll_lines = []
+
+    for i, p in enumerate(poll['choices']):
+        po = '<tr>'
+        po += f'<td><input type="{"checkbox" if poll["multiple"] else "radio" }" class="note-poll-choice" data-note-id="{note_id}" data-choice-index="{i}" {"checked disabled" if p["isVoted"] else "" } {"disabled" if disabled else ""}></td>'
+        po += f'<td>{p["text"]}</td>'
+        po += f'<td>{p["votes"]}</td>'
+        po += '</tr>'
+        poll_lines.append(po)
+    
+    return '<table><tbody>' + (''.join(poll_lines)) + f'</tbody></table><small>{status}</small>'
 
 def error_json(error_id: int, reason: Optional[str] = None, internal: bool = False, status: int = None):
     return make_response(json.dumps({
@@ -283,13 +317,16 @@ def inject_client_settings(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         
-        cur = db.cursor()
-        cur.execute('SELECT * FROM settings WHERE acct = ?', (session['acct'],))
-        row = cur.fetchone()
-        cur.close()
-        if not row:
-            return error_json(1002, 'You must login again')
-        request.client_settings = row
+        if session.get('acct'):
+            cur = db.cursor()
+            cur.execute('SELECT * FROM settings WHERE acct = ?', (session['acct'],))
+            row = cur.fetchone()
+            cur.close()
+            if not row:
+                return make_response('You must login again', 401)
+            request.client_settings = dict(row)
+        else:
+            request.client_settings = {}
         
         return f(*args, **kwargs)
 
@@ -303,6 +340,7 @@ def format_datetime(dtstr: str, to_jst: bool = True):
 
 
 @app.route('/')
+@inject_client_settings
 def root():
     if session.get('logged_in'):
         return home_timeline()
@@ -477,7 +515,7 @@ def auth_callback_check():
     cur.execute('SELECT * FROM settings WHERE acct = ?', (row['acct'],))
     row = cur.fetchone()
     if not row:
-        cur.execute('INSERT INTO settings(acct, alwaysConvertJPEG) VALUES (?, ?)', (session['acct'], 0))
+        cur.execute('INSERT INTO settings(acct, alwaysConvertJPEG, timeline) VALUES (?, ?, ?)', (session['acct'], 0, 'home'))
         db.commit()
     cur.close()
 
@@ -512,8 +550,21 @@ def home_timeline():
         session['logged_in'] = False
         return redirect('/')
     
-    #m = Misskey(address=row['host'], i=row['misskey_token'])
-    #notes = m.notes_timeline()
+    timeline_type = request.args.get('tl')
+    if timeline_type:
+        if timeline_type not in ['home', 'local', 'hybrid', 'global']:
+            return make_response('invalid timeline type', 400)
+        cur = db.cursor()
+        cur.execute('UPDATE settings SET timeline = ? WHERE acct = ?', (timeline_type, session['acct']))
+        cur.close()
+        db.commit()
+        request.client_settings['timeline'] = timeline_type
+    
+    tl = request.client_settings['timeline']
+    if tl == 'home':
+        tl = 'timeline'
+    else:
+        tl = tl + '-timeline'
 
     untilId = request.args.get('untilId')
 
@@ -521,8 +572,7 @@ def home_timeline():
 
     if untilId:
         payload['untilId'] = untilId
-
-    ok, notes, r = api(f'/api/notes/timeline', host=row['host'], json=payload)
+    ok, notes, r = api(f'/api/notes/{tl}', host=row['host'], json=payload)
     if not ok:
         return make_response(f'Timeline failed ({r.status_code})', 400)
 
@@ -539,7 +589,15 @@ def home_timeline():
 @app.route('/notifications', methods=['GET'])
 @login_check
 def notifications():
-    ok, notifications, r = api(f'/api/i/notifications', json={'i': session['misskey_token'], 'limit': 40})
+
+    untilId = request.args.get('untilId')
+
+    payload = {'i': session['misskey_token'], 'limit': 10}
+
+    if untilId:
+        payload['untilId'] = untilId
+
+    ok, notifications, r = api(f'/api/i/notifications', json=payload)
     if not ok:
         return make_response(f'failed ({r.status_code})', 500)
     
@@ -709,18 +767,24 @@ def api_reaction():
     
     return reactions_count_html(res['id'], res['reactions'], res['emojis'], res.get('myReaction'))
 
-@app.route('/notes/<string:note_id>/')
+@app.route('/notes/<string:note_id>')
 @login_check
 def note_detail(note_id: str):
     ok, note, r = api(f'/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
     if not ok:
         res = r.json()
         if res.get('error'):
-            if 'No such' in res['error']['message']:
-                return make_response('ノートが削除されているか、存在しません。', 404)
+            if res['error']['code'] == 'NO_SUCH_NOTE':
+                return make_response('Note not found', 404)
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+    
+    ok, replies, r = api(f'/api/notes/replies', json={'i': session['misskey_token'], 'noteId': note_id})
+    if not ok:
+        res = r.json()
+        if res.get('error'):
             return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
 
-    return render_template('app/note_detail.html', note=note, render_note_element=render_note_element)
+    return render_template('app/note_detail.html', note=note, replies=replies, render_note_element=render_note_element)
 
 @app.route('/api/notes/fetch', methods=['GET'])
 def api_note_fetch():
@@ -776,6 +840,7 @@ def api_reaction_search():
     return render_reaction_picker_element(note_id, suggested_reactions[:10])
 
 @app.route('/api/users/report', methods=['GET'])
+@login_check
 def api_note_report():
     userId = request.args.get('userId')
     comment = request.args.get('comment')
@@ -794,6 +859,7 @@ def api_note_report():
     return make_response('', 200)
 
 @app.route('/api/users/follow', methods=['GET'])
+@login_check
 def api_user_follow():
     userId = request.args.get('userId')
     if not userId:
@@ -815,6 +881,7 @@ def api_user_follow():
     return make_response('', 200)
 
 @app.route('/api/users/unfollow', methods=['GET'])
+@login_check
 def api_user_unfollow():
     userId = request.args.get('userId')
     if not userId:
@@ -830,6 +897,7 @@ def api_user_unfollow():
     return make_response('', 200)
 
 @app.route('/api/users/block', methods=['GET'])
+@login_check
 def api_user_block():
     userId = request.args.get('userId')
     if not userId:
@@ -847,6 +915,7 @@ def api_user_block():
     return make_response('', 200)
 
 @app.route('/api/users/unblock', methods=['GET'])
+@login_check
 def api_user_unblock():
     userId = request.args.get('userId')
     if not userId:
@@ -862,6 +931,7 @@ def api_user_unblock():
     return make_response('', 200)
 
 @app.route('/api/users/mute', methods=['GET'])
+@login_check
 def api_user_mute():
     userId = request.args.get('userId')
     if not userId:
@@ -879,6 +949,7 @@ def api_user_mute():
     return make_response('', 200)
 
 @app.route('/api/users/unmute', methods=['GET'])
+@login_check
 def api_user_unmute():
     userId = request.args.get('userId')
     if not userId:
@@ -893,49 +964,36 @@ def api_user_unmute():
     
     return make_response('', 200)
 
-@app.route('/@<string:acct>')
+@app.route('/api/notes/poll', methods=['GET'])
 @login_check
-def user_detail(acct: str):
+def api_note_poll():
+    noteId = request.args.get('noteId')
+    if not noteId:
+        return error_json(1, 'noteId is required')
     
-    username = ''
-    host = None
-
-    if '@' in acct:
-        username, host = acct.split('@', 1)
-    else:
-        username = acct
+    index = request.args.get('index')
+    if not index.isnumeric():
+        return error_json(1, 'index is not numeric')
     
-    untilId = request.args.get('untilId')
-
-    ok, res, r = api(f'/api/users/show', json={'i': session['misskey_token'], 'username': username, 'host': host})
+    index = int(index)
+    
+    ok, res, r = api('/api/notes/polls/vote', json={'i': session['misskey_token'], 'noteId': noteId, 'choice': index})
     if not ok:
         if res.get('error'):
-            if 'No such' in res['error']['message']:
-                return make_response('ユーザーが削除されているか、存在しません。', 404)
-            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+            if res['error']['code'] == 'NO_SUCH_NOTE':
+                return error_json(1000)
+            if res['error']['code'] == 'ALREADY_VOTED':
+                return error_json(1013)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
     
-    user = res
-    
-    notes_payload = {'i': session['misskey_token'], 'userId': user['id'], 'limit': 11, 'includeReplies': False}
-
-    if untilId:
-        notes_payload['untilId'] = untilId
-
-    ok, res, r2 = api(f'/api/users/notes', json=notes_payload)
+    ok, res, r = api('/api/notes/show', json={'i': session['misskey_token'], 'noteId': noteId})
     if not ok:
         if res.get('error'):
-            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+            if res['error']['code'] == 'NO_SUCH_NOTE':
+                return error_json(1000)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
     
-    notes = res
-    
-    return render_template('app/user_detail.html',
-        user=user,
-        notes=notes,
-        render_note_element=render_note_element,
-        make_mediaproxy_url=make_mediaproxy_url,
-        emoji_convert=emoji_convert,
-        mention2link=mention2link
-    )
+    return make_response(render_poll(res['id'], res['poll']), 200)
 
 @app.route('/api/notes/delete', methods=['GET'])
 @login_check
@@ -993,6 +1051,50 @@ def api_note_unpin():
     
     session['i'] = fetch_i(session['host'], session['misskey_token'])
     return make_response('', 200)
+
+@app.route('/@<string:acct>')
+@login_check
+def user_detail(acct: str):
+    
+    username = ''
+    host = None
+
+    if '@' in acct:
+        username, host = acct.split('@', 1)
+    else:
+        username = acct
+    
+    untilId = request.args.get('untilId')
+
+    ok, res, r = api(f'/api/users/show', json={'i': session['misskey_token'], 'username': username, 'host': host})
+    if not ok:
+        if res.get('error'):
+            if 'No such' in res['error']['message']:
+                return make_response('ユーザーが削除されているか、存在しません。', 404)
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+    
+    user = res
+    
+    notes_payload = {'i': session['misskey_token'], 'userId': user['id'], 'limit': 11, 'includeReplies': False}
+
+    if untilId:
+        notes_payload['untilId'] = untilId
+
+    ok, res, r2 = api(f'/api/users/notes', json=notes_payload)
+    if not ok:
+        if res.get('error'):
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+    
+    notes = res
+    
+    return render_template('app/user_detail.html',
+        user=user,
+        notes=notes,
+        render_note_element=render_note_element,
+        make_mediaproxy_url=make_mediaproxy_url,
+        emoji_convert=emoji_convert,
+        mention2link=mention2link
+    )
 
 @app.route('/mediaproxy/<path:path>')
 @inject_client_settings
