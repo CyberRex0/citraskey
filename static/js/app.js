@@ -191,6 +191,11 @@ function showSelectMenu(note_id) {
     menuEl.style.display = (menuEl.style.display=='none') ? 'inline' : 'none';
 }
 
+function toggleSearchBox() {
+    var searchBoxEl = document.getElementById('searchbox');
+    searchBoxEl.style.display = (searchBoxEl.style.display=='none') ? 'block' : 'none';
+}
+
 function scrollToElement(el) {
     var clientRect = el.getBoundingClientRect();
     var px = window.pageXOffset + clientRect.left;

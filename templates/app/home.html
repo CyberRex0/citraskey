@@ -12,7 +12,19 @@
             <a href="/notifications"><img src="/static/image/notification.png" width="24"/></a>
             &nbsp;
             <a href="/settings"><img src="/static/image/settings.png" width="24"></a>
+            &nbsp;
+            <a href="javascript:toggleSearchBox()"><img src="/static/image/search.png" width="24"></a>
             <br>
+            <div id="searchbox">
+                <form action="/search" method="GET">
+                    <input type="text" name="q" placeholder="検索ワードを入力" style="width: 80%">
+                    <input type="submit" value="検索">
+                    <div style="font-size: 9pt">
+                        <input type="radio" id="searchbox-input-type-note" name="type" value="notes" checked><label for="searchbox-input-type-note">投稿</label>
+                        <input type="radio" id="searchbox-input-type-tag" name="type" value="tags"><label for="searchbox-input-type-tag">タグ</label>
+                    </div>
+                </form>
+            </div>
             <div id="timeline-selector">
                 <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='home' }}" href="/?tl=home">ホーム</a>
                 <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='local' }}" href="/?tl=local">ローカル</a>

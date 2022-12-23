@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | 検索</title>
+    </head>
+    <body>
+        <p>
+            <a href="/">ホーム</a> | <a href="javascript:history.back()">←戻る</a>
+        </p>
+        <form action="/search" method="GET">
+            <input type="text" name="q" placeholder="検索ワードを入力" style="width: 80%" value="{{ request.args.get('q') }}">
+            <input type="submit" value="検索">
+            <span style="font-size: 9pt">
+                <input type="radio" id="searchbox-input-type-note" name="type" value="notes" {{'checked' if request.args.get('type')=='notes'}}><label for="searchbox-input-type-note">投稿</label>
+                <input type="radio" id="searchbox-input-type-tag" name="type" value="tags" {{'checked' if request.args.get('type')=='tags'}}><label for="searchbox-input-type-tag">タグ</label>
+            </span>
+        </form>
+        <br>
+        {% for note in notes %}
+            {% autoescape false %}
+                {{ render_note_element(note, {}) }}
+            {% endautoescape %}
+            <hr size="1">
+        {% endfor %}
+        {% if notes.__len__() > 1 %}
+            <center>
+                <a href="/search?q={{ request.args.get('q') }}&type={{ request.args.get('type') }}&untilId={{ notes[-1]['id'] }}">もっと見る</a>
+            </center>
+        {% endif %}
+        {% include "app/components/footer.html" %}
+    </body>
+</html>

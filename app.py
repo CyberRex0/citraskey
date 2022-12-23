@@ -607,6 +607,48 @@ def notifications():
         render_notification=render_notification
     )
 
+@app.route('/search', methods=['GET'])
+@login_check
+def search():
+    q = request.args.get('q')
+    if not q:
+        return make_response('q is required', 400)
+    
+    search_type =  request.args.get('type')
+    if not search_type:
+        search_type = 'notes'
+    
+    untilId = request.args.get('untilId')
+    
+    if search_type not in ['notes', 'tags']:
+        return make_response('invalid search type', 400)
+    
+    if search_type == 'notes':
+        payload = {'i': session['misskey_token'], 'limit': 10, 'query': q}
+        if untilId:
+            payload['untilId'] = untilId
+        ok, notes, r = api(f'/api/notes/search', json=payload)
+        if not ok:
+            return make_response(f'failed ({r.status_code})', 500)
+        next_url = None
+        if notes:
+            next_url = f'/search?type=notes&q={urllib.parse.quote(q)}&untilId={notes[-1]["id"]}'
+        
+        return render_template('app/search.html', notes=notes, render_note_element=render_note_element, next_url=next_url)
+
+    elif search_type == 'tags':
+        payload = {'i': session['misskey_token'], 'limit': 10, 'tag': q}
+        if untilId:
+            payload['untilId'] = untilId
+        ok, notes, r = api(f'/api/notes/search-by-tag', json=payload)
+        if not ok:
+            return make_response(f'failed ({r.status_code})', 500)
+        next_url = None
+        if notes:
+            next_url = f'/search?type=tags&q={urllib.parse.quote(q)}&untilId={notes[-1]["id"]}'
+        
+        return render_template('app/search.html', notes=notes, render_note_element=render_note_element, next_url=next_url)
+
 @app.route('/settings', methods=['GET', 'POST'])
 @login_check
 @inject_client_settings
