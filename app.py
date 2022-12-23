@@ -1195,5 +1195,8 @@ def emoji2image(emoji_b64: str):
     
     return res
 
+PORT = 8888
+if os.environ.get('PORT'):
+    PORT = int(os.environ.get('PORT'))
 
-app.run(host='0.0.0.0', port=8888, debug=True, threaded=True)
+app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)
