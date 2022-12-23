@@ -3,7 +3,7 @@ import mimetypes
 import os
 import re
 from typing import List, Tuple
-from flask import Flask, make_response, redirect, render_template, send_file, session, request
+from flask import Flask, make_response, redirect, render_template, send_file, send_from_directory, session, request
 from flask_session import Session
 import sqlite3
 import uuid
@@ -346,6 +346,10 @@ def root():
         return home_timeline()
     else:
         return render_template('index.html')
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 @app.route('/logout')
 def logout():
