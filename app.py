@@ -382,6 +382,8 @@ def auth_start():
             MisskeyPermissions.READ_REACTIONS,
             MisskeyPermissions.READ_MESSAGING,
             MisskeyPermissions.READ_FOLLOWING,
+            MisskeyPermissions.READ_MUTES,
+            MisskeyPermissions.READ_BLOCKS,
 
             MisskeyPermissions.WRITE_ACCOUNT,
             MisskeyPermissions.WRITE_DRIVE,
@@ -389,7 +391,9 @@ def auth_start():
             MisskeyPermissions.WRITE_REACTIONS,
             MisskeyPermissions.WRITE_VOTES,
             MisskeyPermissions.WRITE_MESSAGING,
-            MisskeyPermissions.WRITE_FOLLOWING
+            MisskeyPermissions.WRITE_FOLLOWING,
+            MisskeyPermissions.WRITE_MUTES,
+            MisskeyPermissions.WRITE_BLOCKS
 
         ]]),
         'callback': callback_url
