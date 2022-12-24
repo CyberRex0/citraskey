@@ -1,0 +1,8 @@
+<div style="margin: 4px" class="message-form">
+<form action="/api/users/messaging/create" method="POST" enctype="multipart/form-data">
+    <textarea style="width: 100%" name="text" placeholder="メッセージを入力..."></textarea>
+    <input type="file" name="image" accept="image/*">
+    <input style="width: 100%" id="note-form-submit" type="submit" value="送信">
+    <input type="hidden" name="userId" value="{{ sender_id }}">
+</form>
+</div>

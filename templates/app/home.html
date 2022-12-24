@@ -7,14 +7,15 @@
     <body>
         {% include "app/components/note_form.html" %}
         <div class="m4">
-            <a href="javascript:location.reload()"><img src="/static/image/reload.png" width="24"/></a>
-            &nbsp;
-            <a href="/notifications"><img src="/static/image/notification.png" width="24"/></a>
-            &nbsp;
-            <a href="/settings"><img src="/static/image/settings.png" width="24"></a>
-            &nbsp;
-            <a href="javascript:toggleSearchBox()"><img src="/static/image/search.png" width="24"></a>
-            <br>
+            <table style="table-layout: fixed; width: 100%">
+                <tr>
+                    <td><a href="javascript:location.reload()"><img src="/static/image/reload.png" width="24"/></a></td>
+                    <td><a href="/notifications"><img src="/static/image/notification.png" width="24"/></a></td>
+                    <td><a href="/messaging"><img src="/static/image/message.png" width="24"></a></td>
+                    <td><a href="/settings"><img src="/static/image/settings.png" width="24"></a></td>
+                    <td><a href="javascript:toggleSearchBox()"><img src="/static/image/search.png" width="24"></a></td>
+                </tr>
+            </table>
             <div id="searchbox" style="display: none">
                 <form action="/search" method="GET">
                     <input type="text" name="q" placeholder="検索ワードを入力" style="width: 80%">

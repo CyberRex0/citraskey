@@ -192,6 +192,27 @@ def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
         PRESET_REACTIONS=PRESET_REACTIONS
     )
 
+def render_message_element(message: dict, receiverId: str):
+    return render_template(
+        'app/components/message.html',
+        message=message,
+        markdown_render=markdown_render,
+        emoji_convert=emoji_convert,
+        reactions_count_html=reactions_count_html,
+        enumerate=enumerate,
+        make_mediaproxy_url=make_mediaproxy_url,
+        renderURL=renderURL,
+        format_datetime=format_datetime,
+        cleantext=cleantext,
+        convert_tag=convert_tag,
+        mention2link=mention2link,
+        i=session['i'],
+        meta=session['meta'],
+        user_host=session['host'],
+        str=str,
+        receiverId=receiverId
+    )
+
 def renderURL(src):
     return URL_REGEX.sub(r'<a href="\1">\1</a>', src)
 
@@ -657,6 +678,46 @@ def search():
         
         return render_template('app/search.html', notes=notes, render_note_element=render_note_element, next_url=next_url)
 
+@app.route('/messaging', methods=['GET'])
+@login_check
+def messaging():
+
+    ok, histories, r = api(f'/api/messaging/history', json={'i': session['misskey_token']})
+    if not ok:
+        return make_response(f'failed ({r.status_code})', 500)
+
+    histories_f = []
+    user_ids = set()
+    for h in histories:
+        if h['user']['id'] in user_ids:
+            continue
+        user_ids.add(h['user']['id'])
+        histories_f.append(h)
+
+    return render_template('app/messaging.html',
+        histories=histories_f,
+        emoji_convert=emoji_convert,
+        format_datetime=format_datetime,
+        make_mediaproxy_url=make_mediaproxy_url
+    )
+
+@app.route('/messaging/<string:user_id>', methods=['GET'])
+@login_check
+def messaging_user(user_id):
+
+    ok, messages, r = api(f'/api/messaging/messages', json={'i': session['misskey_token'], 'userId': user_id})
+    if not ok:
+        return make_response(f'failed ({r.status_code})', 500)
+    
+    return render_template('app/messaging_user.html',
+        messages=messages,
+        emoji_convert=emoji_convert,
+        format_datetime=format_datetime,
+        make_mediaproxy_url=make_mediaproxy_url,
+        render_message_element=render_message_element,
+        sender_id=user_id
+    )
+
 @app.route('/settings', methods=['GET', 'POST'])
 @login_check
 @inject_client_settings
@@ -1101,6 +1162,65 @@ def api_note_unpin():
     
     session['i'] = fetch_i(session['host'], session['misskey_token'])
     return make_response('', 200)
+
+@app.route('/api/users/messaging/create', methods=['POST'])
+@login_check
+def api_user_messaging_create():
+    user_id = request.form.get('userId')
+    if not user_id:
+        return make_response('userId is required', 400)
+    
+    text = request.form.get('text')
+    if not text:
+        return make_response('text is required', 400)
+    
+    ok, res, r = api(f'/api/messaging/messages/create', json={'i': session['misskey_token'], 'userId': user_id, 'text': text})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return make_response('No such user', 400)
+            if res['error']['code'] == 'YOU_HAVE_BEEN_BLOCKED':
+                return make_response('You have been blocked', 400)
+            return make_response(f'{res["error"]["message"]}\n{res["error"]["code"]}', 400)
+    
+    return redirect(f'/messaging/{res["userId"]}')
+
+@app.route('/api/users/messaging/messages', methods=['GET'])
+@login_check
+def api_user_messaging_messages():
+    last_id = request.args.get('lastId')
+    user_id = request.args.get('userId')
+    if not user_id:
+        return error_json(1, 'userId is required')
+    
+    payload = {'i': session['misskey_token'], 'userId': user_id, 'limit': 100}
+
+    if last_id:
+        payload['sinceId'] = last_id
+
+    ok, res, r = api(f'/api/messaging/messages', json=payload)
+    res: list
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return error_json(1000)
+            return error_json(1, f'{res["error"]["message"]}\n{res["error"]["code"]}', internal=True)
+    
+    res = list(filter(lambda x: x['id'] != last_id, res))
+
+    if not res:
+        return make_response(json.dumps({'updated': False}), 200)
+
+    msghts = []
+    for msg in res:
+        msghts.append(render_message_element(msg, receiverId=session['i']['id']))
+    
+    resj = {
+        'updated': True,
+        'html': '\n'.join(msghts),
+        'lastMessageId': res[-1]['id']
+    }
+    return make_response(json.dumps(resj), 200)
 
 @app.route('/@<string:acct>')
 @login_check

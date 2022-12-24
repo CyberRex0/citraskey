@@ -1,0 +1,22 @@
+{% set acct = message['user']['username'] + ('@' + message['user']['host'] if message['user']['host'] else '') %}
+<div class="message-element-container {{ 'message-sender' if receiverId != message['userId'] else 'message-receiver' }}">
+    <div class="message-header">
+        <table>
+            <tr>
+                <td><a href="/@{{ acct }}"><img src="{{ make_mediaproxy_url(message['user']['avatarUrl'], jpeg=True) }}" width="24" class="icon-in-note"></a></td>
+                <td>
+                    {{ (emoji_convert(message['user']['name'], message['user']['emojis']) or message['user']['username']) | safe }}
+                    <br>
+                    <small>@{{ acct }}</small>
+                </td>
+            </tr>
+        </table>
+    </div>
+    <div class="message">
+        <div class="message-body">
+            {{ emoji_convert(message['text'], session['meta']['emojis']) | safe }}
+        </div>
+        <br>
+        <span style="position:absolute; right: 2px; bottom: 2px; float:right; font-size: 8pt;">{{ format_datetime(message['createdAt']) }}</span>
+    </div>
+</div>

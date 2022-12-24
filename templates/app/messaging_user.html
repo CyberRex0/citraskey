@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | チャット</title>
+    </head>
+    <body class="m4">
+        <a href="/">ホーム</a> | <a href="/messaging">チャット一覧</a>
+        {% include "app/components/message_form.html" %}
+        <hr size="1">                                   
+        <div id="messages">
+            {% for message in messages %}
+                {{ render_message_element(message, receiverId=session['i']['id']) | safe }}
+            {% endfor %}
+        </div>
+        <script>
+            var MESSAGING_CONFIG = {
+                receiverId: "{{ session['i']['id'] }}",
+                senderId: "{{ sender_id }}",
+                lastMessageId: "{{ messages[0]['id'] if messages else '' }}",
+            }
+        </script>
+        {% include "app/components/footer.html" %}
+        <script src="/static/js/messaging.js"></script>
+    </body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | チャット</title>
+    </head>
+    <body class="m4">
+        <a href="/">ホーム</a>
+        {% for h in histories %}
+            {% if h['user']['id'] == session['i']['id'] %}
+                {% set user = h['recipient'] %}
+            {% else %}
+                {% set user = h['user'] %}
+            {% endif %}
+            {% set acct = user['username'] + ('@' + user['host'] if user['host'] else '') %}
+            <div class="message-overview" data-user-id="{{ user['id'] }}">
+                <table>
+                    <tr>
+                        <td><a href="/@{{ acct }}"><img src="{{ make_mediaproxy_url(user['avatarUrl'], jpeg=True) }}" width="24" class="icon-in-note"></a></td>
+                        <td>
+                            {{ (emoji_convert(user['name'], user['emojis']) or user['username']) | safe }}
+                            <br>
+                            <small>@{{ acct }}</small>
+                        </td>
+                    </tr>
+                </table>
+                <br>
+                <span style="position:absolute; right: 2px; bottom: 2px; float:right; font-size: 9pt;">{{ format_datetime(h['createdAt']) }}</span>
+            </div>
+        {% endfor %}
+        {% include "app/components/footer.html" %}
+    </body>
+</html>

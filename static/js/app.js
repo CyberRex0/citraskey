@@ -30,7 +30,7 @@ function noteContentVToggle(id) {
     noteContent.style.display = (noteContent.style.display=='none') ? 'block' : 'none';
 }
 
-function api_request(url, callback) {
+function api_request(url, callback, error_callback) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url);
     xhr.onload = function () {
@@ -46,6 +46,9 @@ function api_request(url, callback) {
                 }
             } catch (e) {
                 alert('API Request failed!\n' + xhr.responseText);
+            }
+            if (error_callback) {
+                error_callback(xhr.status, xhr.responseText);
             }
             throw new Error(xhr.status);
         }
@@ -407,6 +410,11 @@ var notePollChoiceHandler = function (e) {
     }
 }
 
+function messagingLinkHandler(e) {
+    var userId = e.target.getAttribute('data-user-id');
+    location.href = '/messaging/' + userId;
+}
+
 function registerPickerReactionHandlerById(noteId) {
     var pickerReactionButtons = document.getElementsByClassName('note-reaction-picker-child-' + noteId);
     for (var i = 0; i < pickerReactionButtons.length; i++) {
@@ -456,6 +464,13 @@ function registerNotePollChoiceHandler() {
     }
 }
 
+function registerMessagingLinkHandler() {
+    var messagingLinks = document.getElementsByClassName('message-overview');
+    for (var i = 0; i < messagingLinks.length; i++) {
+        messagingLinks[i].onclick = messagingLinkHandler;
+    }
+}
+
 window.addEventListener('load', function () {
     if (!document.getElementsByClassName) {
         alert('getElementsByClassName is not supported.');
@@ -466,6 +481,7 @@ window.addEventListener('load', function () {
     registerFollowButtonHandler();
     registerUserActionSelectHandler();
     registerNotePollChoiceHandler();
+    registerMessagingLinkHandler();
 
     var noteFormVisibility = document.getElementById('note-form-select-visibility');
     var noteFormLocalOnly = document.getElementById('nf_localonly');

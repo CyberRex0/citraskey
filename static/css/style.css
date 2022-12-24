@@ -166,3 +166,36 @@
     margin-top: 4px;
     margin-bottom: 4px;
 }
+
+.message-overview {
+    position: relative;
+    border: 1px solid #777777;
+    border-radius: 4px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.message {
+    position: relative;
+    border: 1px solid #777777;
+    border-radius: 4px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    display: block;
+}
+
+.message-element-container {
+    position: relative;
+}
+
+.message-receiver .message-header {
+    text-align: -webkit-right;
+}
+
+.message-receiver .message {
+    /*width: auto;*/
+}
+
+.message-receiver .message .message-body {
+    /*text-align: -webkit-right;*/
+}
