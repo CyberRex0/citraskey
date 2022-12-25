@@ -158,7 +158,7 @@ def cleantext(text: str):
 
 def convert_tag(text: str):
     # inline text
-    return re.sub(r'(^|\s)#(\w+)', r'\1<a href="/search?tag=\2">#\2</a>', text)
+    return re.sub(r'(^|\s)#(\w+)', r'\1<a href="/search?type=tags&q=\2">#\2</a>', text)
 
 def mention2link(text: str):
     return re.sub(r'@([0-9a-zA-Z\-\._@]+)', r'<a href="/@\1">@\1</a>', text)
@@ -283,13 +283,13 @@ def error_json(error_id: int, reason: Optional[str] = None, internal: bool = Fal
         'reason': reason
     }), status or (500 if internal else 400))
 
-def fetch_meta(host: str):
-    r = http_session.post('https://' + host + '/api/meta')
+def fetch_meta(host: str) -> dict:
+    r = http_session.post('https://' + host + '/api/meta', headers={'Content-Type': 'application/json'}, data=b'{}')
     if r.status_code != 200:
         raise Exception('Failed to fetch meta')
     return r.json()
 
-def fetch_i(host: str, token: str):
+def fetch_i(host: str, token: str) -> dict:
     r = http_session.post('https://' + host + '/api/i', json={'i': token})
     if r.status_code != 200:
         raise Exception('Failed to fetch i')
@@ -524,14 +524,10 @@ def auth_callback_check():
     cur.close()
     db.commit()
 
-    r = http_session.post(f'https://{row["host"]}/api/meta')
-    if r.status_code != 200:
-        return make_response(f'Get meta failed ({r.status_code})', 500)
-    
     try:
-        meta = r.json()
-    except:
-        return make_response('Get meta failed (JSON Parse)', 500)
+        meta = fetch_meta(row['host'])
+    except Exception as e:
+        return make_response(str(e), 500)
 
     session['i'] = fetch_i(row['host'], row['misskey_token'])
     session['meta'] = meta
@@ -716,6 +712,19 @@ def messaging_user(user_id):
         make_mediaproxy_url=make_mediaproxy_url,
         render_message_element=render_message_element,
         sender_id=user_id
+    )
+
+@app.route('/follow-requests')
+@login_check
+def follow_requests():
+    ok, follow_requests, r = api(f'/api/following/requests/list', json={'i': session['misskey_token']})
+    if not ok:
+        return make_response(f'failed ({r.status_code})', 500)
+
+    return render_template('app/follow_requests.html',
+        follow_requests=follow_requests,
+        emoji_convert=emoji_convert,
+        make_mediaproxy_url=make_mediaproxy_url
     )
 
 @app.route('/settings', methods=['GET', 'POST'])
@@ -1222,6 +1231,52 @@ def api_user_messaging_messages():
     }
     return make_response(json.dumps(resj), 200)
 
+@app.route('/api/i/follow-requests/accept', methods=['POST'])
+@login_check
+def api_i_follow_requests_accept():
+    user_id = request.form.get('userId')
+    if not user_id:
+        return make_response('userId is required', 400)
+    
+    ok, res, r = api(f'/api/following/requests/accept', json={'i': session['misskey_token'], 'userId': user_id})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return make_response('No such user', 400)
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 400)
+    
+    return redirect(f'/follow-requests')
+
+@app.route('/api/i/follow-requests/reject', methods=['POST'])
+@login_check
+def api_i_follow_requests_reject():
+    user_id = request.form.get('userId')
+    if not user_id:
+        return make_response('userId is required', 400)
+    
+    ok, res, r = api(f'/api/following/requests/reject', json={'i': session['misskey_token'], 'userId': user_id})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return make_response('No such user', 400)
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 400)
+    
+    return redirect(f'/follow-requests')
+
+
+@app.route('/users/<string:user_id>')
+@login_check
+def user_detail_id(user_id: str):
+
+    ok, res, r = api(f'/api/users/show', json={'i': session['misskey_token'], 'userId': user_id})
+    if not ok:
+        if res.get('error'):
+            if res['error']['code'] == 'NO_SUCH_USER':
+                return make_response('ユーザーが削除されているか、存在しません。', 404)
+            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 400)
+    
+    return redirect('/@' + res['username'] + ('@' + res['host'] if res['host'] else ''))
+
 @app.route('/@<string:acct>')
 @login_check
 def user_detail(acct: str):
@@ -1234,9 +1289,12 @@ def user_detail(acct: str):
     else:
         username = acct
     
+    payload = {'i': session['misskey_token'], 'username': username, 'host': host, 'includeReplies': False}
+    
     untilId = request.args.get('untilId')
+    tab = request.args.get('tab')
 
-    ok, res, r = api(f'/api/users/show', json={'i': session['misskey_token'], 'username': username, 'host': host})
+    ok, res, r = api(f'/api/users/show', json=payload)
     if not ok:
         if res.get('error'):
             if 'No such' in res['error']['message']:
@@ -1246,16 +1304,27 @@ def user_detail(acct: str):
     user = res
     
     notes_payload = {'i': session['misskey_token'], 'userId': user['id'], 'limit': 11, 'includeReplies': False}
+    if tab:
+        if tab == 'replies':
+            notes_payload['includeReplies'] = True
+        if tab == 'medias':
+            notes_payload['withFiles'] = True
 
     if untilId:
         notes_payload['untilId'] = untilId
 
-    ok, res, r2 = api(f'/api/users/notes', json=notes_payload)
-    if not ok:
-        if res.get('error'):
-            return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+    if tab != 'pins':
+
+        ok, res, r2 = api(f'/api/users/notes', json=notes_payload)
+        if not ok:
+            if res.get('error'):
+                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+        
+        notes = res
     
-    notes = res
+    else:
+
+        notes = user['pinnedNotes']
     
     return render_template('app/user_detail.html',
         user=user,
@@ -1274,15 +1343,9 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
 
     path = base64.urlsafe_b64decode(path.encode()).decode()
 
-    # 正規化
-    try:
-        parsed_url = urllib.parse.urlparse(path)
-    except:
-        return make_response('Bad URL', 500)
-    
-    path = parsed_url._replace(path=parsed_url.path.replace('//', '/')).geturl()
-    if '//' in path[len('http://'):]:
-        raise Exception('E')
+    # Misskeyのバグ対策
+    if '/proxy/' in path:
+        path = urllib.parse.unquote(path.split('?url=')[1])
 
     cache_name = hashlib.sha256(((f'hq_{MEDIAPROXY_IMAGECOMP_LEVEL_HQ}' if hq else f'q_{MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL}') + ('_jpeg' if jpeg or alwayscnvjpeg else '')  + re.sub(r'[^a-zA-Z0-9\.]', '_', path)).encode()).hexdigest()
     if os.path.exists('mediaproxy_cache/' + cache_name):

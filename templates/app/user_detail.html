@@ -2,7 +2,7 @@
 <html>
     <head>
         {% include "app/components/head.html" %}
-        <title>Citraskey | {{ user['name'] }} </title>
+        <title>Citraskey | {{ user['name'] or user['username'] }} </title>
     </head>
     <body>
         <p>
@@ -51,6 +51,9 @@
                     </tr>
                 </tbody>
             </table>
+            <p style="font-size: 9pt">
+                <strong>{{ user['notesCount'] }}</strong> 投稿 &nbsp; <strong>{{ user['followingCount'] }}</strong> フォロー &nbsp; <strong>{{ user['followersCount'] }}</strong> フォロワー
+            </p>
             <div style="float: right;">
                 {% if user['id'] != session['i']['id'] %}
                 <button id="user-follow-button-{{ user['id'] }}" class="user-follow-button" data-user-id="{{ user['id'] }}" data-follow-state="{{ user['isFollowing'].__str__().lower() }}">フォロー{{ '解除' if user['isFollowing'] else '' }}</button>
@@ -73,14 +76,18 @@
                 </select>
             </div>
             <br>
-            <p style="font-size: 9pt">
-                <strong>{{ user['notesCount'] }}</strong> 投稿 &nbsp; <strong>{{ user['followingCount'] }}</strong> フォロー &nbsp; <strong>{{ user['followersCount'] }}</strong> フォロワー
-            </p>
             {% if user['description'] %}
                 <p class="user-description">
                     {{ mention2link(emoji_convert(user['description'], user['emojis']).replace('\n', '<br>')) | safe }}
                 </p>
             {% endif %}
+        </div>
+        <br>
+        <div id="tabs">
+            <a class="tab {{ 'tab-active' if (not request.args.get('tab')) or (request.args.get('tab')=='post') }}" href="/@{{acct}}">投稿</a>
+            <a class="tab {{ 'tab-active' if request.args.get('tab')=='replies' }}" href="/@{{acct}}?tab=replies">投稿と返信</a>
+            <a class="tab {{ 'tab-active' if request.args.get('tab')=='pins' }}" href="/@{{acct}}?tab=pins">ピン留め</a>
+            <a class="tab {{ 'tab-active' if request.args.get('tab')=='medias' }}" href="/@{{acct}}?tab=medias">メディア</a>
         </div>
 
         <br>

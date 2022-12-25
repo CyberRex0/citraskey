@@ -199,6 +199,25 @@ function toggleSearchBox() {
     searchBoxEl.style.display = (searchBoxEl.style.display=='none') ? 'block' : 'none';
 }
 
+function confirmLogout() {
+    if (window.confirm('ログアウトしますか？')) {
+        location.href = '/logout';
+    }
+}
+
+function actionFollowReq(action, userId) {
+    var formEl = document.createElement('form');
+    formEl.setAttribute('method', 'POST');
+    formEl.setAttribute('action', '/api/i/follow-requests/' + action);
+    var inputEl = document.createElement('input');
+    inputEl.setAttribute('type', 'hidden');
+    inputEl.setAttribute('name', 'userId');
+    inputEl.setAttribute('value', userId);
+    formEl.appendChild(inputEl);
+    document.body.appendChild(formEl);
+    formEl.submit();
+}
+
 function scrollToElement(el) {
     var clientRect = el.getBoundingClientRect();
     var px = window.pageXOffset + clientRect.left;

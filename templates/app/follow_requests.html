@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | フォロー申請一覧</title>
+    </head>
+    <body class="m4">
+        <a href="/">ホーム</a>
+        <hr size="1">
+        <h3>フォロー申請一覧</h3>
+        {% for req in follow_requests %}
+        {% set user = req['follower'] %}
+        {% set acct = req['follower']['username'] + ('@' + req['follower']['host'] if req['follower']['host'] else '') %}
+        <div class="message-overview">
+            <table>
+                <tr>
+                    <td><a href="/@{{ acct }}"><img src="{{ make_mediaproxy_url(user['avatarUrl'], jpeg=True) }}" width="24" class="icon-in-note"></a></td>
+                    <td>
+                        {{ (emoji_convert(user['name'], user['emojis']) or user['username']) | safe }}
+                        <br>
+                        <small>@{{ acct }}</small>
+                    </td>
+                </tr>
+            </table>
+            <span class="follow-request-action-buttons" style="position:absolute; right: 2px; bottom: 2px;">
+                <a href="javascript:actionFollowReq('accept', '{{ user['id'] }}')"><img src="/static/image/follow-request-accept.png" width="24"></a>
+                &nbsp;
+                <a href="javascript:actionFollowReq('reject', '{{ user['id'] }}')"><img src="/static/image/follow-request-reject.png" width="24"></a>
+            </span>
+        </div>
+        {% else %}
+        <center>
+            <span style="color:gray">リクエストはありません</span>
+        </center>
+        {% endfor %}
+        {% include "app/components/footer.html" %}
+        <script src="/static/js/messaging.js"></script>
+    </body>
+</html>

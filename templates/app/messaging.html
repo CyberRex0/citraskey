@@ -6,6 +6,8 @@
     </head>
     <body class="m4">
         <a href="/">ホーム</a>
+        <hr size="1">
+        <h3>チャット履歴</h3>
         {% for h in histories %}
             {% if h['user']['id'] == session['i']['id'] %}
                 {% set user = h['recipient'] %}
@@ -27,6 +29,10 @@
                 <br>
                 <span style="position:absolute; right: 2px; bottom: 2px; float:right; font-size: 9pt;">{{ format_datetime(h['createdAt']) }}</span>
             </div>
+        {% else %}
+            <center>
+                <span style="color:gray">履歴がありません</span>
+            </center>
         {% endfor %}
         {% include "app/components/footer.html" %}
     </body>

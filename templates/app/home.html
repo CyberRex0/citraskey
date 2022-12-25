@@ -12,6 +12,9 @@
                     <td><a href="javascript:location.reload()"><img src="/static/image/reload.png" width="24"/></a></td>
                     <td><a href="/notifications"><img src="/static/image/notification.png" width="24"/></a></td>
                     <td><a href="/messaging"><img src="/static/image/message.png" width="24"></a></td>
+                    {% if not session['i']['autoAcceptFollowed'] %}
+                    <td><a href="/follow-requests"><img src="/static/image/follow-request.png" width="24"></a></td>
+                    {% endif %}
                     <td><a href="/settings"><img src="/static/image/settings.png" width="24"></a></td>
                     <td><a href="javascript:toggleSearchBox()"><img src="/static/image/search.png" width="24"></a></td>
                 </tr>
@@ -57,9 +60,11 @@
         {% endautoescape %}
         <hr id="bottom-hr" size="1">
         <a style="float:right" href="javascript:scrollToElementX(document.getElementById('timeline-selector'))">▲</a>
+        {% if notes.__len__() > 1 %}
         <center>
             <a href="/?untilId={{ notes[-1]['id'] }}">もっと見る</a>
         </center>
+        {% endif %}
         {% include "app/components/footer.html" %}
     </body>
 </html>

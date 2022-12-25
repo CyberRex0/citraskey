@@ -199,3 +199,7 @@
 .message-receiver .message .message-body {
     /*text-align: -webkit-right;*/
 }
+
+.follow-request-action-buttons a {
+    text-align: -webkit-right;
+}
