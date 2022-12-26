@@ -1411,7 +1411,7 @@ def emoji2image(emoji_b64: str):
         return send_file(emoji_cache_path, mimetype='image/png')
     
     emoji_hex = hex(ord(emoji[0]))[2:]
-    r = http_session.get(f'https://twemoji.maxcdn.com/v/latest/svg/{emoji_hex}.svg')
+    r = http_session.get(f'https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/{emoji_hex}.svg')
     if r.status_code != 200:
         return make_response('', r.status_code)
     
