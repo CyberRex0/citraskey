@@ -16,9 +16,11 @@
     <input type="hidden" id="note-form-note-id" name="renoteId" value="">
     <input type="hidden" id="note-form-reply-id" name="replyId" value="">
 </form>
+{% if not request.client_settings.get('enableScriptLess') %}
 <div id="note-form-wait-screen">
     <center style="margin: 0 auto;">タイムラインを読み込んでいます..</center>
 </div>
+{% endif %}
 </div>
 
 <script>

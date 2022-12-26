@@ -23,9 +23,20 @@
                 </tr>
             </table>
             <span class="follow-request-action-buttons" style="position:absolute; right: 2px; bottom: 2px;">
+                {% if not request.client_settings['enableScriptLess'] %}
                 <a href="javascript:actionFollowReq('accept', '{{ user['id'] }}')"><img src="/static/image/follow-request-accept.png" width="24"></a>
                 &nbsp;
                 <a href="javascript:actionFollowReq('reject', '{{ user['id'] }}')"><img src="/static/image/follow-request-reject.png" width="24"></a>
+                {% else %}
+                <form action="/api/i/follow_requests/accept" method="POST" style="display:inline">
+                    <input type="hidden" name="userId" value="{{ user['id'] }}">
+                    <input type="submit" value="承認">
+                </form>
+                &nbsp;
+                <form action="/api/i/follow_requests/reject" method="POST" style="display:inline">
+                    <input type="hidden" name="userId" value="{{ user['id'] }}">
+                    <input type="submit" value="拒否">
+                {% endif %}
             </span>
         </div>
         {% else %}

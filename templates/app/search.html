@@ -9,10 +9,11 @@
             <a href="/">ホーム</a> | <a href="javascript:history.back()">←戻る</a>
         </p>
         <form action="/search" method="GET">
-            <input type="text" name="q" placeholder="検索ワードを入力" style="width: 80%" value="{{ request.args.get('q') }}">
+            <input type="text" name="q" placeholder="検索ワードを入力" style="width: 80%" value="{{ request.args.get('q') or ''}}">
             <input type="submit" value="検索">
+            <br>
             <span style="font-size: 9pt">
-                <input type="radio" id="searchbox-input-type-note" name="type" value="notes" {{'checked' if request.args.get('type')=='notes'}}><label for="searchbox-input-type-note">投稿</label>
+                <input type="radio" id="searchbox-input-type-note" name="type" value="notes" {{'checked' if request.args.get('type')=='notes' or not request.args.get('type')}}><label for="searchbox-input-type-note">投稿</label>
                 <input type="radio" id="searchbox-input-type-tag" name="type" value="tags" {{'checked' if request.args.get('type')=='tags'}}><label for="searchbox-input-type-tag">タグ</label>
             </span>
         </form>

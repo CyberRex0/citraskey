@@ -37,7 +37,7 @@ cur = db.cursor()
 cur.execute('CREATE TABLE IF NOT EXISTS auth_session (id TEXT, mi_session_id TEXT, misskey_token TEXT, host TEXT, acct TEXT, callback_auth_code TEXT, ready INTEGER, auth_url TEXT, auth_qr_base64 TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS users (id TEXT, acct TEXT, misskey_token TEXT, host TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS shortlink (sid TEXT, url TEXT)')
-cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER, timeline TEXT)')
+cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER, enableScriptLess INTEGER, timeline TEXT)')
 cur.close()
 db.commit()
 
@@ -126,14 +126,20 @@ def reactions_count_html(note_id: str, reactions: dict, emojis: List[dict], my_r
         is_local_emoji = k.endswith('@.:')
         is_unicode_emoji = False
         try:
-            emj = f'<img src="{make_mediaproxy_url(emojis[k][0])}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{emojis[k][1]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
+            if not request.client_settings['enableScriptLess']:
+                emj = f'<img src="{make_mediaproxy_url(emojis[k][0])}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{emojis[k][1]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
+            else:
+                emj = f'<a href="/api/notes/reaction?noteId={note_id}&reaction={emojis[k][1]}&type=custom&direct=true"><img src="{make_mediaproxy_url(emojis[k][0])}" class="emoji-in-text" /></a>'
         except:
             emd = demoji.findall(k)
             if emd:
                 is_unicode_emoji = True
                 emj = f'<img src="{make_emoji2image_url(k)}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{unicode_emoji_hex(k)}" data-reaction-type="unicode" data-reaction-element-root="{uniqId}" />'
+                if request.client_settings['enableScriptLess']:
+                    emj = f'<a href="/api/notes/reaction?noteId={note_id}&reaction={unicode_emoji_hex(k)}&type=unicode&direct=true"><img src="{make_emoji2image_url(k)}" class="emoji-in-text" /></a>'
             else:
                 emj = k
+
         rhtm.append(f'<span id="note-reaction-element-root-{uniqId}" class="note-reaction-button-{note_id} {"note-reaction-selected" if k == my_reaction else ""} {"reactive-emoji note-reaction-available" if is_local_emoji or is_unicode_emoji else ""}" data-reaction-element-id="{uniqId2}">{emj}: {reactions[k]}</span>')
     
     html = '&nbsp;'.join(rhtm)
@@ -224,14 +230,14 @@ def render_notification(n: dict):
     ntypestring = NOTIFICATION_TYPES.get(ntype, '不明')
 
     if ntype == 'reaction':
-        ntypestring = emoji_convert(n['reaction'], n['note']['emojis'])
+        ntypestring = emoji_convert(n['reaction'], n['note']['emojis'] + session['meta']['emojis'])
 
     if ntype != 'pollEnded':
         user_avatar_url = n["user"]["avatarUrl"]
         user_name = n["user"]["name"]
         user_acct_name = n["user"]["username"]
         user_name_emojis = n["user"]["emojis"]
-        htm = f'<img src="{make_mediaproxy_url(user_avatar_url)}" width="18"> {emoji_convert(user_name or user_acct_name, user_name_emojis)} さん{ntypestring}<br>'
+        htm = f'<a href="/users/{n["user"]["id"]}"><img src="{make_mediaproxy_url(user_avatar_url)}" width="18"></a> {emoji_convert(user_name or user_acct_name, user_name_emojis)} さん{ntypestring}<br>'
     else:
         #user_avatar_url = n["note"]["user"]["avatarUrl"]
         #user_name = n["note"]["user"]["name"]
@@ -304,6 +310,7 @@ def api(url, host: str = None, method: str = 'POST', decode_json: bool = True, *
         raise Exception('No host')
     
     r = getattr(http_session, method.lower())('https://' + hst + url, *args, **kwargs)
+    #print(f'{url}: {r.status_code}')
     if r.status_code == 200:
         obj = {}
         if decode_json:
@@ -321,14 +328,14 @@ def login_check(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('logged_in') or not session.get('id'):
-            return error_json(1002, 'You are not logged in')
+            return make_response('You are not logged in<br><a href="/logout">logout</a>', 401)
     
         cur = db.cursor()
         cur.execute('SELECT * FROM users WHERE id = ?', (session['id'],))
         row = cur.fetchone()
         if not row:
             cur.close()
-            return error_json(1002, 'You are not logged in')
+            return make_response('You are not logged in<br><a href="/logout">logout</a>', 401)
         
         return f(*args, **kwargs)
 
@@ -344,7 +351,7 @@ def inject_client_settings(f):
             row = cur.fetchone()
             cur.close()
             if not row:
-                return make_response('You must login again', 401)
+                return make_response('You must login again<br><a href="/logout">logout</a>', 401)
             request.client_settings = dict(row)
         else:
             request.client_settings = {}
@@ -601,9 +608,9 @@ def home_timeline():
     if not ok:
         return make_response(f'Timeline failed ({r.status_code})', 400)
 
-    for note in notes:
-        print(f'{note["user"]["username"]}: {note["text"]}')
-        print(note['reactions'], note['emojis'])
+    #for note in notes:
+    #    print(f'{note["user"]["username"]}: {note["text"]}')
+    #    print(note['reactions'], note['emojis'])
 
     return render_template(
         'app/home.html',
@@ -613,6 +620,7 @@ def home_timeline():
 
 @app.route('/notifications', methods=['GET'])
 @login_check
+@inject_client_settings
 def notifications():
 
     untilId = request.args.get('untilId')
@@ -637,7 +645,8 @@ def notifications():
 def search():
     q = request.args.get('q')
     if not q:
-        return make_response('q is required', 400)
+        return render_template('app/search.html', notes=[], next_url='')
+        #return make_response('q is required', 400)
     
     search_type =  request.args.get('type')
     if not search_type:
@@ -737,15 +746,21 @@ def settings():
     
     if request.method == 'POST':
         alwaysConvertJPEG = 1 if request.form.get('alwaysConvertJPEG')=='on' else 0
+        enableScriptLess = 1 if request.form.get('enableScriptLess')=='on' else 0
 
         cur = db.cursor()
-        cur.execute('UPDATE settings SET alwaysConvertJPEG = ? WHERE acct = ?', (alwaysConvertJPEG, session['acct']))
+        cur.execute('UPDATE settings SET alwaysConvertJPEG = ?, enableScriptLess = ? WHERE acct = ?', (alwaysConvertJPEG, enableScriptLess, session['acct']))
         cur.execute('SELECT * FROM settings WHERE acct = ?', (session['acct'],))
         row = cur.fetchone()
         cur.close()
         db.commit()
 
         return render_template('app/settings.html', settings=row, updated=True)
+
+@app.route('/note-form', methods=['GET'])
+@login_check
+def note_form():
+    return render_template('app/note_form_page.html')
 
 @app.route('/api/notes/create', methods=['POST'])
 @login_check
@@ -818,6 +833,9 @@ def api_renote():
                     return error_json(1, res['error']['message'])
         return make_response(f'Renote failed ({r.status_code})', 500)
     
+    if request.args.get('direct') == 'true':
+        return redirect(f'/notes/{note_id}')
+
     return make_response('', 200)
 
 @app.route('/api/notes/undo_renote', methods=['GET'])
@@ -842,6 +860,7 @@ def api_undo_renote():
 
 @app.route('/api/notes/reaction', methods=['GET'])
 @login_check
+@inject_client_settings
 def api_reaction():
     note_id = request.args.get('noteId')
     if not note_id:
@@ -885,10 +904,14 @@ def api_reaction():
     if not ok:
         return error_json(1, 'Reaction failed (After-Fetch Error)', internal=True)
     
+    if request.args.get('direct')=='true':
+        return redirect(f'/notes/{note_id}')
+
     return reactions_count_html(res['id'], res['reactions'], res['emojis'], res.get('myReaction'))
 
 @app.route('/notes/<string:note_id>')
 @login_check
+@inject_client_settings
 def note_detail(note_id: str):
     ok, note, r = api(f'/api/notes/show', json={'i': session['misskey_token'], 'noteId': note_id})
     if not ok:
@@ -1279,6 +1302,7 @@ def user_detail_id(user_id: str):
 
 @app.route('/@<string:acct>')
 @login_check
+@inject_client_settings
 def user_detail(acct: str):
     
     username = ''
@@ -1427,6 +1451,16 @@ def emoji2image(emoji_b64: str):
         f.write(stdout)
     
     return res
+
+@app.before_request
+def before_request():
+    if request.path == '/static/js/app.js':
+        if session.get('id'):
+            cur = db.cursor()
+            cur.execute('SELECT * FROM settings WHERE acct = ?', (session['acct'],))
+            settings = dict(cur.fetchone())
+            if settings.get('enableScriptLess'):
+                return make_response('', 200)
 
 PORT = 8888
 if os.environ.get('PORT'):

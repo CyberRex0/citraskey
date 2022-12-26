@@ -506,13 +506,13 @@ window.addEventListener('load', function () {
     var noteFormLocalOnly = document.getElementById('nf_localonly');
 
     if (noteFormVisibility) {
-        noteFormVisibility.onchange = function (e) { Cookies.set('note-form-visibility', e.target.value); }
+        noteFormVisibility.onchange = function (e) { Cookies.set('note-form-visibility', e.target.value, { expires: 365 }); }
         if (Cookies.get('note-form-visibility')) {
             noteFormVisibility.selectedIndex = NOTE_VISIBILITY[Cookies.get('note-form-visibility')];
         }
     }
     if (noteFormLocalOnly) {
-        noteFormLocalOnly.onchange = function (e) { Cookies.set('note-form-localonly', e.target.checked); }
+        noteFormLocalOnly.onchange = function (e) { Cookies.set('note-form-localonly', e.target.checked, { expires: 365 }); }
         if (Cookies.get('note-form-localonly')) {
             noteFormLocalOnly.checked = Cookies.get('note-form-localonly') === 'true';
         }

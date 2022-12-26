@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | 投稿フォーム</title>
+    </head>
+    <body>
+        <a href="/">ホーム</a>
+        <div style="margin: 4px" class="note-form">
+            <form action="/api/notes/create" method="POST" enctype="multipart/form-data">
+                {% if request.args.get('quoteNoteId') %}
+                <div id="note-form-quote-head">[引用ノートを編集中]</div>
+                {% endif %}
+                {% if request.args.get('replyNoteId') %}
+                <div id="note-form-reply-head">[返信を編集中]</div>
+                {% endif %}
+                <textarea id="note-form-input-text" style="width: 30%; height: 15%;" name="text" placeholder="今なにしてる？"></textarea>
+                <br>
+                <select id="note-form-select-visibility" name="visibility">
+                    <option value="public">パブリック</option>
+                    <option value="home">ホーム</option>
+                    <option value="followers">フォロワー限定</option>
+                </select><br>
+                <input type="checkbox" id="nf_localonly" name="localOnly"><label for="nf_localonly">ローカルのみ</label>
+                <input type="checkbox" id="nf_cw"><label for="nf_cw">CW</label>
+                <input type="text" id="cw_input" name="cw" placeholder="CWの説明を入力..." style="width: 100%;" maxlength="100">
+                <input type="file" name="image" accept="image/*">
+                <br><br>
+                <input style="font-size:15pt" id="note-form-submit" type="submit" value="ノート">
+                {% if request.args.get('quoteNoteId') %}
+                <input type="hidden" id="note-form-note-id" name="renoteId" value="{{ request.args.get('quoteNoteId') }}">
+                {% endif %}
+                {% if request.args.get('replyNoteId') %}
+                <input type="hidden" id="note-form-reply-id" name="replyId" value="{{ request.args.get('replyNoteId') }}">
+                {% endif %}
+            </form>
+        </div>
+    </body>
+</html>

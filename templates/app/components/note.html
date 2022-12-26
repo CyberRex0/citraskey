@@ -51,11 +51,21 @@
 
     <div>
         {% if not renote %}
+        {% if not request.client_settings['enableScriptLess'] %}
         <button onclick="reply('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})">{{ note['repliesCount'] }} 返信</button>
         <button onclick="do_renote(this, '{{ note['id'] }}')" {{ 'disabled' if private else '' }}> {{ note['renoteCount'] }} リノート</button>
         <button onclick="quote('{{ note['id'] }}', '{{ note['visibility'] }}', {{ 'true' if note['localOnly'] else 'false' }})" {{ 'disabled' if private else '' }}>引用</button>
         <button onclick="reaction('{{ note['id'] }}')">絵文字</button>
         <button onclick="showSelectMenu('{{ note['id'] }}')" style="float: right;">...</button>
+        {% else %}
+        <span style="font-size:10.5pt">
+        [<a href="/note-form?replyNoteId={{ note['id'] }}">返信</a>]
+        &nbsp;
+        [<a href="/api/notes/renote?noteId={{ note['id'] }}&direct=true">リノート</a>]
+        &nbsp;
+        [<a href="/note-form?quoteNoteId={{ note['id'] }}">引用</a>]
+        </span>
+        {% endif %}
         <br>
         <div style="float: right; font-size: 7pt;">
             <select class="note-menu" id="note-menu-{{ note['id'] }}" style="display: none" data-note-id="{{ note['id'] }}">

@@ -56,7 +56,11 @@
             </p>
             <div style="float: right;">
                 {% if user['id'] != session['i']['id'] %}
+                {% if not request.client_settings['enableScriptLess'] %}
                 <button id="user-follow-button-{{ user['id'] }}" class="user-follow-button" data-user-id="{{ user['id'] }}" data-follow-state="{{ user['isFollowing'].__str__().lower() }}">フォロー{{ '解除' if user['isFollowing'] else '' }}</button>
+                {% else %}
+                <a href="/api/users/{{ 'un' if user['isFollowing'] else '' }}follow?userId={{ user['id'] }}">フォロー{{ '解除' if user['isFollowing'] }}</a>
+                {% endif %}
                 {% endif %}
                 <select id="user-action-{{ user['id'] }}" class="user-action-select">
                     <option disabled selected>選択...</option>

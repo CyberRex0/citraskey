@@ -9,14 +9,14 @@
         <div class="m4">
             <table style="table-layout: fixed; width: 100%">
                 <tr>
-                    <td><a href="javascript:location.reload()"><img src="/static/image/reload.png" width="24"/></a></td>
+                    <td><a href="{{ 'javascript:location.reload()' if not request.client_settings['enableScriptLess'] else '/' }}"><img src="/static/image/reload.png" width="24"/></a></td>
                     <td><a href="/notifications"><img src="/static/image/notification.png" width="24"/></a></td>
                     <td><a href="/messaging"><img src="/static/image/message.png" width="24"></a></td>
                     {% if not session['i']['autoAcceptFollowed'] %}
                     <td><a href="/follow-requests"><img src="/static/image/follow-request.png" width="24"></a></td>
                     {% endif %}
                     <td><a href="/settings"><img src="/static/image/settings.png" width="24"></a></td>
-                    <td><a href="javascript:toggleSearchBox()"><img src="/static/image/search.png" width="24"></a></td>
+                    <td><a href="{{ 'javascript:toggleSearchBox()' if not request.client_settings['enableScriptLess'] else '/search' }}"><img src="/static/image/search.png" width="24"></a></td>
                 </tr>
             </table>
             <div id="searchbox" style="display: none">

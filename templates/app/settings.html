@@ -14,6 +14,8 @@
             <form action="" method="POST">
                 <input type="checkbox" id="settings-form-alwaysconvertjpeg" name="alwaysConvertJPEG" {{ 'checked' if settings['alwaysConvertJPEG'] else '' }}><label for="settings-form-alwaysconvertjpeg"> GIFを含む画像をJPEGに変換して表示する (画質低下&軽量化)</label>
                 <br>
+                <input type="checkbox" id="settings-form-scriptlessmode" name="enableScriptLess" {{ 'checked' if settings['enableScriptLess'] else '' }}><label for="settings-form-scriptlessmode"> JavaScriptを使わないUIを使用する</label>
+                <br>
                 <input type="submit" value="適用">
             </form>
             <br>
