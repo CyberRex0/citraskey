@@ -642,6 +642,7 @@ def notifications():
 
 @app.route('/search', methods=['GET'])
 @login_check
+@inject_client_settings
 def search():
     q = request.args.get('q')
     if not q:
