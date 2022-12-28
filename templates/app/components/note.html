@@ -9,7 +9,7 @@
             <tr>
                 <td><a href="/@{{ acct }}"><img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"></a></td>
                 <td class="note-header-name">
-                    {{ emoji_convert(note['user']['name'] or note['user']['username'], note['user']['emojis']) }} {{ '<small>がリノート</small>' if renote else '' }}
+                    {{ emoji_convert(cleantext(note['user']['name'] or note['user']['username']), note['user']['emojis']) }} {{ '<small>がリノート</small>' if renote else '' }}
                     {% if not renote %}
                         <br>
                         <span style="font-size: 8pt">@{{ acct }}</span>

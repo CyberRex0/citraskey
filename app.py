@@ -160,6 +160,10 @@ def markdown_render(text: str):
     return t
 
 def cleantext(text: str):
+    if not text:
+        return ''
+    # remove script tag
+    text = re.sub(r'<script.*?>.*?</script>', '', text, flags=re.DOTALL)
     return text
 
 def convert_tag(text: str):
@@ -237,7 +241,7 @@ def render_notification(n: dict):
         user_name = n["user"]["name"]
         user_acct_name = n["user"]["username"]
         user_name_emojis = n["user"]["emojis"]
-        htm = f'<a href="/users/{n["user"]["id"]}"><img src="{make_mediaproxy_url(user_avatar_url)}" width="18"></a> {emoji_convert(user_name or user_acct_name, user_name_emojis)} さん{ntypestring}<br>'
+        htm = f'<a href="/users/{n["user"]["id"]}"><img src="{make_mediaproxy_url(user_avatar_url)}" width="18"></a> {emoji_convert(cleantext(user_name or user_acct_name), user_name_emojis)} さん{ntypestring}<br>'
     else:
         #user_avatar_url = n["note"]["user"]["avatarUrl"]
         #user_name = n["note"]["user"]["name"]
@@ -276,7 +280,7 @@ def render_poll(note_id: str, poll: dict):
     for i, p in enumerate(poll['choices']):
         po = '<tr>'
         po += f'<td><input type="{"checkbox" if poll["multiple"] else "radio" }" class="note-poll-choice" data-note-id="{note_id}" data-choice-index="{i}" {"checked disabled" if p["isVoted"] else "" } {"disabled" if disabled else ""}></td>'
-        po += f'<td>{p["text"]}</td>'
+        po += f'<td>{cleantext(p["text"])}</td>'
         po += f'<td>{p["votes"]}</td>'
         po += '</tr>'
         poll_lines.append(po)
@@ -704,7 +708,8 @@ def messaging():
         histories=histories_f,
         emoji_convert=emoji_convert,
         format_datetime=format_datetime,
-        make_mediaproxy_url=make_mediaproxy_url
+        make_mediaproxy_url=make_mediaproxy_url,
+        cleantext=cleantext
     )
 
 @app.route('/messaging/<string:user_id>', methods=['GET'])
@@ -1357,7 +1362,8 @@ def user_detail(acct: str):
         render_note_element=render_note_element,
         make_mediaproxy_url=make_mediaproxy_url,
         emoji_convert=emoji_convert,
-        mention2link=mention2link
+        mention2link=mention2link,
+        cleantext=cleantext
     )
 
 @app.route('/mediaproxy/<path:path>')
