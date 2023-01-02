@@ -36,7 +36,7 @@
     {% if note['files'] %}
     <div>
         {% for i, file in enumerate(note['files']) %}
-            <a href="{{ make_mediaproxy_url(file['url'], True) }}">添付ファイル {{i+1}}</a>
+            <a href="{{ make_mediaproxy_url(file['url'], hq=True) }}">添付ファイル {{i+1}}</a>
         {% endfor %}
     </div>
     {% endif %}
