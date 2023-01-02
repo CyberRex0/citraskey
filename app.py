@@ -58,7 +58,7 @@ SYS_DIRS = ['emoji_cache', 'mediaproxy_cache']
 MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL = '20'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ = '2'
 
-MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM = '50'
+MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM = '35'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM = '90'
 
 URL_REGEX = re.compile(r'(?!.*(?:"|>))(https?://[\w!?/+\-_~;.,*&@#$%()\'=:]+)')
@@ -96,9 +96,12 @@ def make_short_link(url: str):
     cur.close()
     return sid
 
-def make_mediaproxy_url(target: str, hq: bool = False, jpeg: bool = False):
+def make_mediaproxy_url(target: str, hq: bool = False, jpeg: bool = False, detail: bool = False):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
-    return f'/mediaproxy{"_hq" if hq else ""}{"_jpeg" if jpeg else ""}/{b64code}'
+    qs = []
+    if detail:
+        qs.append('detail=true')
+    return f'/mediaproxy{"_hq" if hq else ""}{"_jpeg" if jpeg else ""}/{b64code}' + ('?' + ('&'.join(qs)))
 
 def make_emoji2image_url(target: str):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
@@ -1384,7 +1387,7 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
     cache_name = hashlib.sha256(re.sub(r'[^a-zA-Z0-9\.]', '_', path).encode()).hexdigest()
     if os.path.exists('mediaproxy_cache/' + cache_name):
         with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
-            return send_file('mediaproxy_cache/' + cache_name, mimetype=m.id_filename('mediaproxy_cache/' + cache_name))
+            return send_file('mediaproxy_cache/' + cache_name, mimetype=m.id_filename('mediaproxy_cache/' + cache_name), max_age=1209600)
 
     r = http_session.get(path)
     if r.status_code != 200:
@@ -1392,6 +1395,7 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
     
     res = make_response(r.content, 200)
     res.headers['Content-Type'] = r.headers['Content-Type']
+    res.headers['Cache-Control'] = 'public, max-age=1209600'
 
     convert_target_mime = ['image/png', 'image/jpeg', 'image/webp', 'image/heif', 'image/heic', 'image/avif']
     if jpeg or alwayscnvjpeg:
@@ -1421,10 +1425,11 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
         #if ffmpeg.returncode != 0:
         #    return make_response('', 500)
         
-        gm_args = ['gm', 'convert', '-', '-resize', '400>', '-quality', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM, f'{convert_format}:-']
+        gm_args = ['convert', '-', '-resize', '400>', '-quality', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM, f'{convert_format}:-']
         if hq:
-            gm_args[4] = '800>'
-            gm_args[6] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM
+            gm_args[3] = '800>'
+            gm_args[5] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM
+        
         gm = subprocess.Popen(gm_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdout, stderr = gm.communicate(r.content)
         if gm.returncode != 0:
@@ -1432,8 +1437,9 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
         
         res = make_response(stdout, 200)
         res.headers['Content-Type'] = 'image/' + convert_format
+        res.headers['Cache-Control'] = 'public, max-age=1209600'
 
-        cache_name = f'q{gm_args[6]}_' + cache_name
+        cache_name = f'q{gm_args[5]}_' + cache_name
 
         with open('mediaproxy_cache/' + cache_name, 'wb') as f:
             f.write(stdout)
