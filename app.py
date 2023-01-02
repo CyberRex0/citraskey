@@ -58,6 +58,9 @@ SYS_DIRS = ['emoji_cache', 'mediaproxy_cache']
 MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL = '20'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ = '2'
 
+MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM = '50'
+MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM = '90'
+
 URL_REGEX = re.compile(r'(?!.*(?:"|>))(https?://[\w!?/+\-_~;.,*&@#$%()\'=:]+)')
 
 NOTIFICATION_TYPES = {
@@ -1378,7 +1381,7 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
     if '/proxy/' in path:
         path = urllib.parse.unquote(path.split('?url=')[1])
 
-    cache_name = hashlib.sha256(((f'hq_{MEDIAPROXY_IMAGECOMP_LEVEL_HQ}' if hq else f'q_{MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL}') + ('_jpeg' if jpeg or alwayscnvjpeg else '')  + re.sub(r'[^a-zA-Z0-9\.]', '_', path)).encode()).hexdigest()
+    cache_name = hashlib.sha256(re.sub(r'[^a-zA-Z0-9\.]', '_', path).encode()).hexdigest()
     if os.path.exists('mediaproxy_cache/' + cache_name):
         with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
             return send_file('mediaproxy_cache/' + cache_name, mimetype=m.id_filename('mediaproxy_cache/' + cache_name))
@@ -1399,19 +1402,38 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
         with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
             ctype = m.id_buffer(r.content[:1024])
 
+    convert_format = 'jpeg'
+    if not (jpeg or alwayscnvjpeg):
+        if 'image/webp' in request.headers['Accept']:
+            convert_format = 'webp'
+        if 'image/avif' in request.headers['Accept']:
+            convert_format = 'avif'
+
     if ctype in convert_target_mime:
-        path = urllib.parse.unquote(path)
-        ffmpeg_args = ['ffmpeg', '-i', path, '-user_agent', HTTP_USER_AGENT, '-loglevel', 'error', '-c:v', 'mjpeg', '-qscale:v', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL , '-vf', 'scale=400x240:force_original_aspect_ratio=decrease', '-vframes', '1', '-pix_fmt', 'yuvj420p', '-f', 'image2', '-']
+        cache_name = convert_format + '_' + cache_name
+        #path = urllib.parse.unquote(path)
+        #ffmpeg_args = ['ffmpeg', '-i', path, '-user_agent', HTTP_USER_AGENT, '-loglevel', 'error', '-c:v', 'mjpeg', '-qscale:v', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL , '-vf', 'scale=400x240:force_original_aspect_ratio=decrease', '-vframes', '1', '-pix_fmt', 'yuvj420p', '-f', 'image2', '-']
+        #if hq:
+        #    ffmpeg_args[10] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ
+        #    ffmpeg_args[12] = 'scale=800x480:force_original_aspect_ratio=decrease'
+        #ffmpeg = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE)
+        #stdout, stderr = ffmpeg.communicate()
+        #if ffmpeg.returncode != 0:
+        #    return make_response('', 500)
+        
+        gm_args = ['gm', 'convert', '-', '-resize', '400>', '-quality', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM, f'{convert_format}:-']
         if hq:
-            ffmpeg_args[10] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ
-            ffmpeg_args[12] = 'scale=800x480:force_original_aspect_ratio=decrease'
-        ffmpeg = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE)
-        stdout, stderr = ffmpeg.communicate()
-        if ffmpeg.returncode != 0:
+            gm_args[4] = '800>'
+            gm_args[6] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM
+        gm = subprocess.Popen(gm_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        stdout, stderr = gm.communicate(r.content)
+        if gm.returncode != 0:
             return make_response('', 500)
         
         res = make_response(stdout, 200)
-        res.headers['Content-Type'] = 'image/jpeg'
+        res.headers['Content-Type'] = 'image/' + convert_format
+
+        cache_name = f'q{gm_args[6]}_' + cache_name
 
         with open('mediaproxy_cache/' + cache_name, 'wb') as f:
             f.write(stdout)
