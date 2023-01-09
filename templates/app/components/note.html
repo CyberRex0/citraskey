@@ -9,7 +9,7 @@
             <tr>
                 <td><a href="/@{{ acct }}"><img src="{{ make_mediaproxy_url(note['user']['avatarUrl']) }}" class="icon-in-note"></a></td>
                 <td class="note-header-name">
-                    {{ emoji_convert(cleantext(note['user']['name'] or note['user']['username']), note['user']['emojis']) }} {{ '<small>がリノート</small>' if renote else '' }}
+                    {{ emoji_convert(cleantext(note['user']['name'] or note['user']['username']), note['user']['host'] or session['host']) }} {{ '<small>がリノート</small>' if renote else '' }}
                     {% if not renote %}
                         <br>
                         <span style="font-size: 8pt">@{{ acct }}</span>
@@ -19,10 +19,10 @@
         </table>
         {% if not renote %}<img src="/static/image/visibility/{{ note['visibility'] }}.png" class="visibility-icon" style="position:absolute; right: 2px; top: 2px;">{% endif %}
     </div>
-    <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['emojis']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
+    <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['user']['host'] or session['host']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
 
     <div style="display: {{ 'none' if note['cw'] else 'block' }}" class="note-content" id="note-content-{{ note['id'] }}">
-        {{ mention2link(renderURL(emoji_convert(markdown_render(convert_tag(cleantext(note['text'] or ''))), note['emojis']))) }}
+        {{ mention2link(renderURL(emoji_convert(markdown_render(convert_tag(cleantext(note['text'] or ''))), note['user']['host'] or session['host']))) }}
     </div>
 
     {% if not quote %}
@@ -46,7 +46,7 @@
     {% endif %}
 
     <div id="{{ note['id'] }}-reactions">
-        {{ reactions_count_html(note['id'], note['reactions'], note['emojis'], note.get('myReaction')) }}
+        {{ reactions_count_html(note['id'], note['reactions'], note.get('myReaction'), note['user']['host'] or session['host']) }}
     </div>
 
     <div>

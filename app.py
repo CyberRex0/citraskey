@@ -26,12 +26,16 @@ import time
 from functools import wraps
 import datetime
 import magic
+from modules.emojistore import EmojiStore
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
 
 db = sqlite3.connect('database.db', check_same_thread=False)
 db.row_factory = sqlite3.Row
+
+emoji_db = sqlite3.connect('emoji_cache.db', check_same_thread=False)
+emoji_db.row_factory = sqlite3.Row
 
 cur = db.cursor()
 cur.execute('CREATE TABLE IF NOT EXISTS auth_session (id TEXT, mi_session_id TEXT, misskey_token TEXT, host TEXT, acct TEXT, callback_auth_code TEXT, ready INTEGER, auth_url TEXT, auth_qr_base64 TEXT)')
@@ -41,6 +45,11 @@ cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG IN
 cur.close()
 db.commit()
 
+cur = emoji_db.cursor()
+cur.execute('CREATE TABLE IF NOT EXISTS emoji_cache(host TEXT, data TEXT, last_updated INTEGER)')
+cur.close()
+emoji_db.commit()
+
 app = Flask(__name__, static_url_path='/static')
 app.secret_key = b'SECRET'
 app.config['SESSION_TYPE'] = 'filesystem'
@@ -48,10 +57,12 @@ app.config['SECRET_KEY'] = 'SECRET'
 Session(app)
 request.client_settings: dict
 
-HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15 3DSskey/0.0.1'
+HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15 Citraskey/0.0.1'
 
 http_session = requests.Session()
 http_session.headers['User-Agent'] = HTTP_USER_AGENT
+
+emojiStore = EmojiStore(emoji_db, session=http_session)
 
 SYS_DIRS = ['emoji_cache', 'mediaproxy_cache']
 
@@ -62,6 +73,7 @@ MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM = '35'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM = '90'
 
 URL_REGEX = re.compile(r'(?!.*(?:"|>))(https?://[\w!?/+\-_~;.,*&@#$%()\'=:]+)')
+MISSKEY_EMOJI_REGEX = re.compile(r':([a-zA-Z0-9_]+)(?:@?)(|[a-zA-Z0-9\.-]+):')
 
 NOTIFICATION_TYPES = {
     'follow': 'にフォローされました',
@@ -107,7 +119,19 @@ def make_emoji2image_url(target: str):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
     return f'/emoji2image/{b64code}'
 
-def emoji_convert(tx: str, emojis: List[dict]):
+def parse_misskey_emoji(host, tx):
+    emojis = []
+    for emoji in MISSKEY_EMOJI_REGEX.findall(tx):
+        h = emoji[1] or host
+        if h == '.':
+            h = host
+        e = emojiStore.get(h, emoji[0])
+        if e:
+            emojis.append(e)
+    return emojis
+
+def emoji_convert(tx: str, host):
+    emojis = parse_misskey_emoji(host, tx)
     for emoji in emojis:
         tx = tx.replace(f':{emoji["name"]}:', f'<img src="{make_mediaproxy_url(emoji["url"])}" class="emoji-in-text">')
     if not tx:
@@ -121,30 +145,32 @@ def emoji_convert(tx: str, emojis: List[dict]):
 def unicode_emoji_hex(e):
     return hex(ord(e[0]))[2:]
 
-def reactions_count_html(note_id: str, reactions: dict, emojis: List[dict], my_reaction: Optional[str]):
+def reactions_count_html(note_id: str, reactions: dict, my_reaction: Optional[str], host: str):
     if not reactions:
         return ''
-    emojis = {f':{e["name"]}:': [e['url'], e["name"]] for e in emojis}
     rhtm = []
     for k in reactions.keys():
         uniqId = randomstr(8)
         uniqId2 = randomstr(8)
         is_local_emoji = k.endswith('@.:')
         is_unicode_emoji = False
-        try:
-            if not request.client_settings['enableScriptLess']:
-                emj = f'<img src="{make_mediaproxy_url(emojis[k][0])}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{emojis[k][1]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
-            else:
-                emj = f'<a href="/api/notes/reaction?noteId={note_id}&reaction={emojis[k][1]}&type=custom&direct=true"><img src="{make_mediaproxy_url(emojis[k][0])}" class="emoji-in-text" /></a>'
-        except:
+        emj = k
+
+        if k.startswith(':'):
+            ep = parse_misskey_emoji(host, k)
+            if ep:
+                e = ep[0]
+                if not request.client_settings['enableScriptLess']:
+                    emj = f'<img src="{make_mediaproxy_url(e["url"])}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{e["name"]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
+                else:
+                    emj = f'<a href="/api/notes/reaction?noteId={note_id}&reaction={e["name"]}&type=custom&direct=true"><img src="{make_mediaproxy_url(e["url"])}" class="emoji-in-text" /></a>'
+        else:
             emd = demoji.findall(k)
             if emd:
                 is_unicode_emoji = True
                 emj = f'<img src="{make_emoji2image_url(k)}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{unicode_emoji_hex(k)}" data-reaction-type="unicode" data-reaction-element-root="{uniqId}" />'
                 if request.client_settings['enableScriptLess']:
                     emj = f'<a href="/api/notes/reaction?noteId={note_id}&reaction={unicode_emoji_hex(k)}&type=unicode&direct=true"><img src="{make_emoji2image_url(k)}" class="emoji-in-text" /></a>'
-            else:
-                emj = k
 
         rhtm.append(f'<span id="note-reaction-element-root-{uniqId}" class="note-reaction-button-{note_id} {"note-reaction-selected" if k == my_reaction else ""} {"reactive-emoji note-reaction-available" if is_local_emoji or is_unicode_emoji else ""}" data-reaction-element-id="{uniqId2}">{emj}: {reactions[k]}</span>')
     
@@ -240,14 +266,14 @@ def render_notification(n: dict):
     ntypestring = NOTIFICATION_TYPES.get(ntype, '不明')
 
     if ntype == 'reaction':
-        ntypestring = emoji_convert(n['reaction'], n['note']['emojis'] + session['meta']['emojis'])
+        ntypestring = emoji_convert(n['reaction'], n['user']['host'] or session['host'])
 
     if ntype != 'pollEnded':
         user_avatar_url = n["user"]["avatarUrl"]
         user_name = n["user"]["name"]
         user_acct_name = n["user"]["username"]
         user_name_emojis = n["user"]["emojis"]
-        htm = f'<a href="/users/{n["user"]["id"]}"><img src="{make_mediaproxy_url(user_avatar_url)}" width="18"></a> {emoji_convert(cleantext(user_name or user_acct_name), user_name_emojis)} さん{ntypestring}<br>'
+        htm = f'<a href="/users/{n["user"]["id"]}"><img src="{make_mediaproxy_url(user_avatar_url)}" width="18"></a> {emoji_convert(cleantext(user_name or user_acct_name), n["user"]["host"] or session["host"])} さん{ntypestring}<br>'
     else:
         #user_avatar_url = n["note"]["user"]["avatarUrl"]
         #user_name = n["note"]["user"]["name"]
@@ -919,7 +945,7 @@ def api_reaction():
     if request.args.get('direct')=='true':
         return redirect(f'/notes/{note_id}')
 
-    return reactions_count_html(res['id'], res['reactions'], res['emojis'], res.get('myReaction'))
+    return reactions_count_html(res['id'], res['reactions'], res.get('myReaction'), res['user']['host'] or session['host'])
 
 @app.route('/notes/<string:note_id>')
 @login_check

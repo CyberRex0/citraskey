@@ -20,7 +20,7 @@
                     <tr>
                         <td><a href="/@{{ acct }}"><img src="{{ make_mediaproxy_url(user['avatarUrl'], jpeg=True) }}" width="24" class="icon-in-note"></a></td>
                         <td>
-                            {{ (emoji_convert(cleantext(user['name']), user['emojis']) or user['username']) | safe }}
+                            {{ (emoji_convert(cleantext(user['name']), user['host'] or session['host']) or user['username']) | safe }}
                             <br>
                             <small>@{{ acct }}</small>
                         </td>

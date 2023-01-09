@@ -26,7 +26,7 @@
                     <tr>
                         <td><img class="profile-icon" src="{{ make_mediaproxy_url(user['avatarUrl']) }}"></td>
                         <td>
-                            {% autoescape false %}{{ emoji_convert(cleantext(user['name']), user['emojis']) or user['username'] }}{% endautoescape %}
+                            {% autoescape false %}{{ emoji_convert(cleantext(user['name']), user['host'] or session['host']) or user['username'] }}{% endautoescape %}
                             {% if user['isAdmin'] %}
                                 <span class="user-flag user-flag-admin">Admin</span>
                             {% endif %}
@@ -82,7 +82,7 @@
             <br>
             {% if user['description'] %}
                 <p class="user-description">
-                    {{ mention2link(emoji_convert(cleantext(user['description']), user['emojis']).replace('\n', '<br>')) | safe }}
+                    {{ mention2link(emoji_convert(cleantext(user['description']), user['host'] or session['host']).replace('\n', '<br>')) | safe }}
                 </p>
             {% endif %}
         </div>
