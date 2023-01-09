@@ -1004,16 +1004,7 @@ def api_reaction_search():
     if not q:
         return error_json(1, 'q is required')
     
-    suggested_reactions: List[dict] = []
-
-    for r in session['meta']['emojis']:
-        if q in r['name']:
-            suggested_reactions.append(r)
-        else:
-            for an in r['aliases']:
-                if q in an:
-                    suggested_reactions.append(r)
-                    break
+    suggested_reactions: List[dict] = emojiStore.find_by_keyword(session['host'], q)
     
     if not suggested_reactions:
         return 'ありません'
