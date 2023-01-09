@@ -122,9 +122,10 @@ def make_emoji2image_url(target: str):
 def parse_misskey_emoji(host, tx):
     emojis = []
     for emoji in MISSKEY_EMOJI_REGEX.findall(tx):
+        print(emoji)
         h = emoji[1] or host
         if h == '.':
-            h = host
+            h = session['host']
         e = emojiStore.get(h, emoji[0])
         if e:
             emojis.append(e)
