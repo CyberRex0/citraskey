@@ -40,7 +40,7 @@ body {
     margin-bottom: 4px;
 }
 
-.emoji-in-text {
+.emoji-in-text, .mfm-custom-emoji {
     width: 16px;
 }
 

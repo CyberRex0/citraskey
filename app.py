@@ -26,10 +26,14 @@ import time
 from functools import wraps
 import datetime
 import magic
+import sys
 from modules.emojistore import EmojiStore
+from modules.mfmrenderer import BasicMFMRenderer
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
+
+sys.setrecursionlimit(16389)
 
 db = sqlite3.connect('database.db', check_same_thread=False)
 db.row_factory = sqlite3.Row
@@ -143,6 +147,16 @@ def emoji_convert(tx: str, host):
 
     return tx
 
+def mfm_parse(text: str, host: str = None):
+    return BasicMFMRenderer(
+        emojiStore=emojiStore,
+        emojiUrlFilter=make_mediaproxy_url,
+        unicodeEmojiFilter=lambda x: f'<img class="emoji-in-text" src="{make_emoji2image_url(x)}">',
+        author_host=host,
+        hashtag_url='/search?type=tags&q=',
+        profile_url='/@'
+    ).render(text)
+
 def unicode_emoji_hex(e):
     return hex(ord(e[0]))[2:]
 
@@ -232,7 +246,8 @@ def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
         nest_count=nest_count,
         str=str,
         render_poll=render_poll,
-        PRESET_REACTIONS=PRESET_REACTIONS
+        PRESET_REACTIONS=PRESET_REACTIONS,
+        mfm_parse=mfm_parse
     )
 
 def render_message_element(message: dict, receiverId: str):
@@ -253,7 +268,8 @@ def render_message_element(message: dict, receiverId: str):
         meta=session['meta'],
         user_host=session['host'],
         str=str,
-        receiverId=receiverId
+        receiverId=receiverId,
+        mfm_parse=mfm_parse
     )
 
 def renderURL(src):

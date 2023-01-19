@@ -2,6 +2,7 @@
 {% set quote = note['renote'] and note['text'] %}
 {% set renote = (note['renote'] and not note['text'] and not note['files']) %}
 {% set private = note['visibility'] == 'followers' or note['visibility'] == 'specified' %}
+{% set host = note['user']['host'] or session['host'] %}
 <div class="note {{ 'note-quote' if option_data and option_data['quote'] }} {{ 'note-renote' if renote else 'note-normal' }}" id="note-{{ note['id'] }}" data-user-id="{{ note['user']['id'] }}" data-note-uri="https://{{ user_host }}/notes/{{ note['id'] }}" data-note-remote-uri="{{ note['uri'] }}">
     {% set acct = note['user']['username'] + ('@' + note['user']['host'] if note['user']['host'] else '') %}
     <div class="note-header">
@@ -19,10 +20,10 @@
         </table>
         {% if not renote %}<img src="/static/image/visibility/{{ note['visibility'] }}.png" class="visibility-icon" style="position:absolute; right: 2px; top: 2px;">{% endif %}
     </div>
-    <p class="{{ 'hide' if not note['cw'] else '' }}">{{ emoji_convert(markdown_render(note['cw'] or ''), note['user']['host'] or session['host']) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
+    <p class="{{ 'hide' if not note['cw'] else '' }}">{{ mfm_parse(note['cw'] or '', host) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
 
     <div style="display: {{ 'none' if note['cw'] else 'block' }}" class="note-content" id="note-content-{{ note['id'] }}">
-        {{ mention2link(renderURL(emoji_convert(markdown_render(convert_tag(cleantext(note['text'] or ''))), note['user']['host'] or session['host']))) }}
+        {{ mfm_parse(note['text'] or '', host) }}
     </div>
 
     {% if not quote %}

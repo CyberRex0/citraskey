@@ -8,3 +8,4 @@ Pillow
 flask-session
 filemagic
 orjson
+git+https://github.com/CyberRex0/mfm.py
