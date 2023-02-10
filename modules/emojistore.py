@@ -4,7 +4,8 @@ import requests
 import time
 import math
 
-CACHE_EXPIRE_TIME = 60 * 60 * 12
+CACHE_EXPIRE_TIME = 60 * 30
+FETCH_TIMEOUT = 3
 
 class EmojiStore:
 
@@ -24,7 +25,7 @@ class EmojiStore:
             return f'https://{host}/emoji/{emoji["name"]}.webp'
     
     def _fetch_nodeinfo(self, host):
-        r = requests.get(f'https://{host}/.well-known/nodeinfo')
+        r = requests.get(f'https://{host}/.well-known/nodeinfo', timeout=FETCH_TIMEOUT)
         if r.status_code != 200:
             raise Exception(f'Failed to fetch nodeinfo for {host}')
         res = orjson.loads(r.content)
@@ -41,7 +42,7 @@ class EmojiStore:
         print('Fetching: ' + host)
         try:
             ni = self._fetch_nodeinfo(host)
-            r = requests.post(f'https://{host}/api/meta', headers={'Content-Type': 'application/json'}, data=b'{}')
+            r = requests.post(f'https://{host}/api/meta', headers={'Content-Type': 'application/json'}, data=b'{}', timeout=FETCH_TIMEOUT)
             if r.status_code != 200 and r.status_code != 404:
                 raise Exception(f'Failed to fetch emoji data for {host}')
             if r.status_code != 404:
@@ -49,7 +50,7 @@ class EmojiStore:
                 v = meta['version'].split('.')
                 # Misskey v13以降は別エンドポイントに問い合わせ
                 if ni['software']['name'] == 'misskey' and int(v[0]) >= 13:
-                    r2 = requests.post(f'https://{host}/api/emojis', headers={'Content-Type': 'application/json'}, data=b'{}')
+                    r2 = requests.post(f'https://{host}/api/emojis', headers={'Content-Type': 'application/json'}, data=b'{}', timeout=FETCH_TIMEOUT)
                     if r2.status_code != 200:
                         raise Exception(f'Failed to fetch emoji data for {host} (Misskey v13)')
                     return orjson.loads(r2.content)['emojis']
@@ -57,7 +58,7 @@ class EmojiStore:
                     return meta['emojis']
             else:
                 # Mastodon/Pleroma?
-                r3 = requests.get(f'https://{host}/api/v1/custom_emojis')
+                r3 = requests.get(f'https://{host}/api/v1/custom_emojis', timeout=FETCH_TIMEOUT)
                 if r3.status_code != 200:
                     raise Exception(f'Failed to fetch emoji data for {host} (mastodon, pleroma)')
                 res = orjson.loads(r3.content)
