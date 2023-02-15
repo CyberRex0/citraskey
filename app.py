@@ -126,7 +126,7 @@ def make_emoji2image_url(target: str):
 def parse_misskey_emoji(host, tx):
     emojis = []
     for emoji in MISSKEY_EMOJI_REGEX.findall(tx):
-        print(emoji)
+        #print(emoji)
         h = emoji[1] or host
         if h == '.':
             h = session['host']
@@ -148,14 +148,23 @@ def emoji_convert(tx: str, host):
     return tx
 
 def mfm_parse(text: str, host: str = None):
-    return BasicMFMRenderer(
-        emojiStore=emojiStore,
-        emojiUrlFilter=make_mediaproxy_url,
-        unicodeEmojiFilter=lambda x: f'<img class="emoji-in-text" src="{make_emoji2image_url(x)}">',
-        author_host=host,
-        hashtag_url='/search?type=tags&q=',
-        profile_url='/@'
-    ).render(text)
+    #t = time.time()
+    #txt = BasicMFMRenderer(
+    #    emojiStore=emojiStore,
+    #    emojiUrlFilter=make_mediaproxy_url,
+    #    unicodeEmojiFilter=lambda x: f'<img class="emoji-in-text" src="{make_emoji2image_url(x)}">',
+    #    author_host=host,
+    #    hashtag_url='/search?type=tags&q=',
+    #    profile_url='/@'
+    #).render(text)
+    #print(f'MFM Parse: {(time.time()-t)*1000:.2f}ms')
+    txt = cleantext(text)
+    txt = markdown_render(txt)
+    txt = renderURL(txt)
+    txt = mention2link(txt)
+    txt = convert_tag(txt)
+    txt = emoji_convert(txt, host)
+    return txt
 
 def unicode_emoji_hex(e):
     return hex(ord(e[0]))[2:]

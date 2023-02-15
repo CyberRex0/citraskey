@@ -39,7 +39,7 @@ class EmojiStore:
         raise Exception(f'Failed to fetch nodeinfo for {host}')
     
     def _fetch_emoji_data(self, host):
-        print('Fetching: ' + host)
+        #print('Fetching: ' + host)
         try:
             ni = self._fetch_nodeinfo(host)
             r = requests.post(f'https://{host}/api/meta', headers={'Content-Type': 'application/json'}, data=b'{}', timeout=FETCH_TIMEOUT)
@@ -70,12 +70,14 @@ class EmojiStore:
     def _download(self, host):
         emoji_data = self._fetch_emoji_data(host)
         cur = self.db.cursor()
+        s = time.time()
         cur.execute('REPLACE INTO emoji_cache(host, data, last_updated) VALUES (?, ?, ?)', (host, orjson.dumps(emoji_data), math.floor(time.time())))
+        #print(time.time() - s)
         self.db.commit()
         self.emoji_cache[host] = emoji_data
 
     def _load(self, host) -> list:
-        print(host)
+        #print(host)
         emojis = []
         if host in self.emoji_cache.keys():
             emojis = self.emoji_cache[host]
@@ -121,7 +123,9 @@ class EmojiStore:
         return res
     
     def get(self, host, name):
+        t = time.time()
         emojis = self._load(host)
+        #print(f'DB Load: {(time.time()-t)*1000:.2f}ms')
         for emoji in emojis:
             if emoji['name'] == name:
                 return {'name': emoji['name'], 'url': self._generate_emoji_url(host, emoji)}
