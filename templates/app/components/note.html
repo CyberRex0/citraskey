@@ -40,14 +40,15 @@
             <tr>
                 {% for i, file in enumerate(note['files']) %}
                 <td>
-                    {% if file.get('type', '').startswith('image/') %}
+                    {% set hq_url = make_mediaproxy_url(file['url'], hq=True) %}
+                    {% if file.get('type', '').startswith('image/') and request.client_settings['enableImageThumbnail'] %}
                         {% set url = make_mediaproxy_url(file['url'], lq=True) %}
                         {% if file.get('isSensitive') %}
                             {% set url = '/static/image/nsfw.jpeg' %}
                         {% endif %}
-                        <img src="{{ url }}" width="64" style="display: block;">
+                        <a href="{{ hq_url }}"><img src="{{ url }}" width="48" style="display: block;"></a>
                     {% endif %}
-                    <a href="{{ make_mediaproxy_url(file['url'], hq=True) }}">添付 {{i+1}}</a>
+                    <a href="{{ hq_url }}">添付 {{i+1}}</a>
                 </td>
                 {% endfor %}
             </tr>

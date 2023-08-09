@@ -16,6 +16,8 @@
                 <br>
                 <input type="checkbox" id="settings-form-scriptlessmode" name="enableScriptLess" {{ 'checked' if settings['enableScriptLess'] else '' }}><label for="settings-form-scriptlessmode"> JavaScriptを使わないUIを使用する</label>
                 <br>
+                <input type="checkbox" id="settings-form-imagethumbnail" name="enableImageThumbnail" {{ 'checked' if settings['enableImageThumbnail'] else '' }}><label for="settings-form-imagethumbnail"> 画像のサムネイルを表示する</label>
+                <br>
                 <input type="submit" value="適用">
             </form>
             <br>

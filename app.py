@@ -45,7 +45,7 @@ cur = db.cursor()
 cur.execute('CREATE TABLE IF NOT EXISTS auth_session (id TEXT, mi_session_id TEXT, misskey_token TEXT, host TEXT, acct TEXT, callback_auth_code TEXT, ready INTEGER, auth_url TEXT, auth_qr_base64 TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS users (id TEXT, acct TEXT, misskey_token TEXT, host TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS shortlink (sid TEXT, url TEXT)')
-cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER, enableScriptLess INTEGER, timeline TEXT)')
+cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER DEFAULT 0, enableScriptLess INTEGER DEFAULT 0, timeline TEXT, enableImageThumbnail INTEGER DEFAULT 1)')
 cur.close()
 db.commit()
 
@@ -817,9 +817,10 @@ def settings():
     if request.method == 'POST':
         alwaysConvertJPEG = 1 if request.form.get('alwaysConvertJPEG')=='on' else 0
         enableScriptLess = 1 if request.form.get('enableScriptLess')=='on' else 0
+        enableImageThumbnail = 1 if request.form.get('enableImageThumbnail')=='on' else 0
 
         cur = db.cursor()
-        cur.execute('UPDATE settings SET alwaysConvertJPEG = ?, enableScriptLess = ? WHERE acct = ?', (alwaysConvertJPEG, enableScriptLess, session['acct']))
+        cur.execute('UPDATE settings SET alwaysConvertJPEG = ?, enableScriptLess = ?, enableImageThumbnail = ? WHERE acct = ?', (alwaysConvertJPEG, enableScriptLess, enableImageThumbnail, session['acct']))
         cur.execute('SELECT * FROM settings WHERE acct = ?', (session['acct'],))
         row = cur.fetchone()
         cur.close()
