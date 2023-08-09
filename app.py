@@ -74,6 +74,7 @@ MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL = '20'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ = '2'
 
 MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM = '35'
+MEDIAPROXY_IMAGECOMP_LEVEL_LQ_GM = '15'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM = '90'
 
 URL_REGEX = re.compile(r'(?!.*(?:"|>))(https?://[\w!?/+\-_~;.,*&@#$%()\'=:]+)')
@@ -112,12 +113,12 @@ def make_short_link(url: str):
     cur.close()
     return sid
 
-def make_mediaproxy_url(target: str, hq: bool = False, jpeg: bool = False, detail: bool = False):
+def make_mediaproxy_url(target: str, hq: bool = False, jpeg: bool = False, detail: bool = False, lq: bool = False):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
     qs = []
     if detail:
         qs.append('detail=true')
-    return f'/mediaproxy{"_hq" if hq else ""}{"_jpeg" if jpeg else ""}/{b64code}' + ('?' + ('&'.join(qs)))
+    return f'/mediaproxy{"_hq" if hq else ""}{"_jpeg" if jpeg else ""}{"_lq" if lq else ""}/{b64code}' + ('?' + ('&'.join(qs)))
 
 def make_emoji2image_url(target: str):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
@@ -256,7 +257,8 @@ def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
         str=str,
         render_poll=render_poll,
         PRESET_REACTIONS=PRESET_REACTIONS,
-        mfm_parse=mfm_parse
+        mfm_parse=mfm_parse,
+        print=print
     )
 
 def render_message_element(message: dict, receiverId: str):
@@ -1477,7 +1479,7 @@ def user_detail(acct: str):
 
 @app.route('/mediaproxy/<path:path>')
 @inject_client_settings
-def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
+def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, lq: bool = False):
 
     alwayscnvjpeg = request.client_settings['alwaysConvertJPEG']
 
@@ -1487,7 +1489,8 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
     if '/proxy/' in path:
         path = urllib.parse.unquote(path.split('?url=')[1])
 
-    cache_name = hashlib.sha256(re.sub(r'[^a-zA-Z0-9\.]', '_', path).encode()).hexdigest()
+    cache_key = re.sub(r'[^a-zA-Z0-9\.]', '_', path) + f'{hq=}{jpeg=}{lq=}'
+    cache_name = hashlib.sha256(cache_key.encode()).hexdigest()
     if os.path.exists('mediaproxy_cache/' + cache_name):
         with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
             return send_file('mediaproxy_cache/' + cache_name, mimetype=m.id_filename('mediaproxy_cache/' + cache_name), max_age=1209600)
@@ -1532,6 +1535,9 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False):
         if hq:
             gm_args[3] = '800>'
             gm_args[5] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM
+        if lq:
+            gm_args[3] = '200>'
+            gm_args[5] = MEDIAPROXY_IMAGECOMP_LEVEL_LQ_GM
         
         gm = subprocess.Popen(gm_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdout, stderr = gm.communicate(r.content)
@@ -1560,6 +1566,10 @@ def mediaproxy_hq(path: str):
 @app.route('/mediaproxy_jpeg/<path:path>')
 def mediaproxy_jpeg(path: str):
     return mediaproxy(path, jpeg=True)
+
+@app.route('/mediaproxy_lq/<path:path>')
+def mediaproxy_lq(path: str):
+    return mediaproxy(path, lq=True)
 
 @app.route('/emoji2image/<string:emoji_b64>')
 def emoji2image(emoji_b64: str):

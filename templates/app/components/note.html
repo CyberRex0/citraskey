@@ -36,9 +36,22 @@
 
     {% if note['files'] %}
     <div>
-        {% for i, file in enumerate(note['files']) %}
-            <a href="{{ make_mediaproxy_url(file['url'], hq=True) }}">添付ファイル {{i+1}}</a>
-        {% endfor %}
+        <table>
+            <tr>
+                {% for i, file in enumerate(note['files']) %}
+                <td>
+                    {% if file.get('type', '').startswith('image/') %}
+                        {% set url = make_mediaproxy_url(file['url'], lq=True) %}
+                        {% if file.get('isSensitive') %}
+                            {% set url = '/static/image/nsfw.jpeg' %}
+                        {% endif %}
+                        <img src="{{ url }}" width="64" style="display: block;">
+                    {% endif %}
+                    <a href="{{ make_mediaproxy_url(file['url'], hq=True) }}">添付 {{i+1}}</a>
+                </td>
+                {% endfor %}
+            </tr>
+        </table>
     </div>
     {% endif %}
 
