@@ -17,6 +17,8 @@
                     {% endif %}
                     <td><a href="/settings"><img src="/static/image/settings.png" width="24"></a></td>
                     <td><a href="{{ 'javascript:toggleSearchBox()' if not request.client_settings['enableScriptLess'] else '/search' }}"><img src="/static/image/search.png" width="24"></a></td>
+                    <td><a href="/list"><img src="/static/image/list.png" width="24"></a></td>
+                    <td><a href="/antenna"><img src="/static/image/antenna.png" width="24"></a></td>
                 </tr>
             </table>
             <div id="searchbox" style="display: none">
@@ -34,6 +36,7 @@
                 <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='local' }}" href="/?tl=local">ローカル</a>
                 <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='hybrid' }}" href="/?tl=hybrid">ソーシャル</a>
                 <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='global' }}" href="/?tl=global">グローバル</a>
+                <a class="tab {{ 'tab-active' if request.client_settings['timeline']=='media' }}" href="/?tl=media">メディア</a>
                 <a href="javascript:scrollToElementX(document.getElementById('bottom-hr'))" style="float:right">▼</a>
             </div>
         </div>

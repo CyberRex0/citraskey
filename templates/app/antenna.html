@@ -1,0 +1,15 @@
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | アンテナ</title>
+    </head>
+    <body>
+        <div class="m4">
+            <a href="/">ホーム</a>
+            <hr size="1">
+            {% for l in antennas %}
+                <li><a href="/antenna/view/{{ l['id'] }}">{{ l['name'] }}</a></li>
+            {% endfor %}
+        </div>
+    </body>
+    </html>

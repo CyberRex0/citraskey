@@ -1,0 +1,25 @@
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | アンテナタイムライン</title>
+    </head>
+    <body>
+        <div class="m4">
+            <a href="/">ホーム</a> | <a href="/antenna">アンテナ一覧</a>
+            <h2>{{ info['name'] }}</h2>
+            <hr size="1">
+            {% autoescape false %}
+            {% for note in notes %}
+                {{ render_note_element(note, {}) }}
+            {% endfor %}
+            {% endautoescape %}
+        </div>
+        {% if notes.__len__() > 1 %}
+        <hr size="1">
+        <center>
+            <a href="/antenna/view/{{ info['id'] }}?untilId={{ notes[-1]['id'] }}">もっと見る</a>
+        </center>
+        {% endif %}
+        {% include "app/components/footer.html" %}
+    </body>
+    </html>

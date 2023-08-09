@@ -28,7 +28,7 @@ import datetime
 import magic
 import sys
 from modules.emojistore import EmojiStore
-from modules.mfmrenderer import BasicMFMRenderer
+#from modules.mfmrenderer import BasicMFMRenderer
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
@@ -646,7 +646,7 @@ def home_timeline():
     
     timeline_type = request.args.get('tl')
     if timeline_type:
-        if timeline_type not in ['home', 'local', 'hybrid', 'global']:
+        if timeline_type not in ['home', 'local', 'hybrid', 'global', 'media']:
             return make_response('invalid timeline type', 400)
         cur = db.cursor()
         cur.execute('UPDATE settings SET timeline = ? WHERE acct = ?', (timeline_type, session['acct']))
@@ -666,7 +666,11 @@ def home_timeline():
 
     if untilId:
         payload['untilId'] = untilId
-    ok, notes, r = api(f'/api/notes/{tl}', host=row['host'], json=payload)
+    if timeline_type == 'media' or tl == 'media-timeline':
+        tl = 'hybrid-timeline'
+        payload['withFiles'] = True
+        payload['withReplies'] = True
+    ok, notes, r = api(f'/api/notes/{tl}', host=row['host'], json=payload, timeout=10)
     if not ok:
         return make_response(f'Timeline failed ({r.status_code})', 400)
 
@@ -825,6 +829,62 @@ def settings():
 @login_check
 def note_form():
     return render_template('app/note_form_page.html')
+
+@app.route('/list', methods=['GET'])
+@login_check
+def my_list():
+
+    ok, lst, r = api('/api/users/lists/list', json={'i': session['misskey_token']})
+    if not ok:
+        return make_response('Fetch list failed.', 500)
+    lst: list
+    print(lst)
+    return render_template('app/list.html', lst=lst)
+
+@app.route('/list/view/<string:list_id>', methods=['GET'])
+@login_check
+@inject_client_settings
+def my_list_view(list_id: str):
+
+    ok, listinfo, r = api('/api/users/lists/show', json={'i': session['misskey_token'], 'listId': list_id})
+    if not ok:
+        return make_response('Fetch list failed.', 500)
+
+    payload = {'listId': list_id, 'i': session['misskey_token']}
+    if request.args.get('untilId'):
+        payload['untilId'] = request.args.get('untilId')
+
+    ok, notes, r = api('/api/notes/user-list-timeline', json=payload)
+    if not ok:
+        return make_response('Fetch list show failed.', 500)
+    return render_template('app/list_view.html', info=listinfo, notes=notes, render_note_element=render_note_element)
+
+@app.route('/antenna', methods=['GET'])
+@login_check
+def my_antenna():
+
+    ok, antennas, r = api('/api/antennas/list', json={'i': session['misskey_token']})
+    if not ok:
+        return make_response('Fetch antenna failed.', 500)
+    return render_template('app/antenna.html', antennas=antennas)
+
+@app.route('/antenna/view/<string:antenna_id>', methods=['GET'])
+@login_check
+@inject_client_settings
+def my_antenna_view(antenna_id: str):
+
+    ok, antinfo, r = api('/api/antennas/show', json={'i': session['misskey_token'], 'antennaId': antenna_id})
+    if not ok:
+        return make_response('Fetch antenna failed.', 500)
+
+    payload = {'antennaId': antenna_id, 'i': session['misskey_token']}
+    if request.args.get('untilId'):
+        payload['untilId'] = request.args.get('untilId')
+
+    ok, notes, r = api('/api/antennas/notes', json=payload)
+    if not ok:
+        return make_response('Fetch antenna show failed.', 500)
+    return render_template('app/antenna_view.html', info=antinfo, notes=notes, render_note_element=render_note_element)
 
 @app.route('/api/notes/create', methods=['POST'])
 @login_check
