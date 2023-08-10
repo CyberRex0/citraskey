@@ -97,7 +97,7 @@
         <br>
         {% if request.args.get('untilId') %}
             <center>
-                <a href="{{ request.base_url }}">最新を見る</a>
+                <a href="{{ request.base_url }}?tab={{ request.args.get('tab', 'post') }}">最新を見る</a>
             </center>
             <hr size="1">
         {% endif %}
@@ -110,7 +110,7 @@
         {% if notes.__len__() > 1 %}
         <hr size="1">
         <center>
-            <a href="/@{{ acct }}?untilId={{ notes[-1]['id'] }}">もっと見る
+            <a href="/@{{ acct }}?untilId={{ notes[-1]['id'] }}&tab={{ request.args.get('tab', 'post') }}">もっと見る
             </a>
         </center>
         {% endif %}
