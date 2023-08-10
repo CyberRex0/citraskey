@@ -1532,13 +1532,23 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, lq: bool = False
         #if ffmpeg.returncode != 0:
         #    return make_response('', 500)
         
-        gm_args = ['convert', '-', '-resize', '400>', '-quality', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM, f'{convert_format}:-']
+        gm_args = ['convert', '-resize', '400>', '-quality', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM, '-', f'{convert_format}:-']
         if hq:
-            gm_args[3] = '800>'
-            gm_args[5] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM
+            gm_args[2] = '800>'
+            gm_args[4] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM
         if lq:
-            gm_args[3] = '200>'
-            gm_args[5] = MEDIAPROXY_IMAGECOMP_LEVEL_LQ_GM
+            gm_args[2] = '200>'
+            gm_args[4] = MEDIAPROXY_IMAGECOMP_LEVEL_LQ_GM
+        
+        if convert_format == 'jpeg':
+            gm_args.insert(3, '-colorspace')
+            gm_args.insert(4, 'sRGB')
+            gm_args.insert(5, '-sampling-factor')
+            gm_args.insert(6, '4:2:0')
+            gm_args.insert(7, '-type')
+            gm_args.insert(8, 'truecolor')
+        
+        print(gm_args)
         
         gm = subprocess.Popen(gm_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdout, stderr = gm.communicate(r.content)
