@@ -24,7 +24,7 @@
             <table class="table-flex">
                 <tbody>
                     <tr>
-                        <td><img class="profile-icon" src="{{ make_mediaproxy_url(user['avatarUrl']) }}"></td>
+                        <td>{% autoescape false %}{{ render_icon(user, 'profile-icon') }}{% endautoescape %}</td>
                         <td>
                             {% autoescape false %}{{ emoji_convert(cleantext(user['name']), user['host'] or session['host']) or user['username'] }}{% endautoescape %}
                             {% if user['isAdmin'] %}
@@ -44,6 +44,17 @@
                             {% endif %}
                             {% if user['isSuspended'] %}
                                 <span class="user-flag user-flag-suspended">Suspended</span>
+                            {% endif %}
+                            <br>
+                            {% if user.get('roles') %}
+                                {% for role in sort_roles(user['roles']) %}
+                                    <span class="user-role">
+                                        {% if role['iconUrl'] %}
+                                            <img src="{{ make_mediaproxy_url(role['iconUrl']) }}" width="8">&nbsp;
+                                        {% endif %}
+                                        {{ role['name'] }}
+                                    </span>
+                                {% endfor %}
                             {% endif %}
                             <br>
                             <small>@{{ acct }}</small>

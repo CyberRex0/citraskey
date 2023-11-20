@@ -48,6 +48,14 @@ body {
     width: 30px;
 }
 
+.icon-decorated {
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200% !important;
+    z-index: 1;
+}
+
 .hide {
     display: none !important;
 }
@@ -207,4 +215,10 @@ body {
 
 .follow-request-action-buttons a {
     text-align: -webkit-right;
+}
+
+.user-role {
+    border: 1px solid #777777;
+    border-radius: 2px;
+    font-size: 8pt;
 }

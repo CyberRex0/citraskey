@@ -113,12 +113,12 @@ def make_short_link(url: str):
     cur.close()
     return sid
 
-def make_mediaproxy_url(target: str, hq: bool = False, jpeg: bool = False, detail: bool = False, lq: bool = False):
+def make_mediaproxy_url(target: str, hq: bool = False, jpeg: bool = False, png: bool = False, detail: bool = False, lq: bool = False):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
     qs = []
     if detail:
         qs.append('detail=true')
-    return f'/mediaproxy{"_hq" if hq else ""}{"_jpeg" if jpeg else ""}{"_lq" if lq else ""}/{b64code}' + ('?' + ('&'.join(qs)))
+    return f'/mediaproxy{"_hq" if hq else ""}{"_jpeg" if jpeg else ""}{"_lq" if lq else ""}{"_png" if png else ""}/{b64code}' + ('?' + ('&'.join(qs)))
 
 def make_emoji2image_url(target: str):
     b64code = base64.urlsafe_b64encode(target.encode()).decode()
@@ -135,6 +135,20 @@ def parse_misskey_emoji(host, tx):
         if e:
             emojis.append(e)
     return emojis
+
+def render_icon(user: dict, icon_class: str = 'icon-in-note'):
+    if user.get('avatarDecorations'):
+        html_s = f'<div style="position:relative"><img src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
+        html_m = []
+        for dec in user['avatarDecorations']:
+            html_m.append(f'<img src="{make_mediaproxy_url(dec["url"], png=True)}" class="{icon_class} icon-decorated">')
+        html_e = '</div>'
+        return html_s + (''.join(html_m)) + html_e
+    else:
+        return f'<img src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
+
+def sort_roles(roles: List[dict]):
+    return sorted(roles, key=lambda v: v['displayOrder'], reverse=True)
 
 def emoji_convert(tx: str, host):
     emojis = parse_misskey_emoji(host, tx)
@@ -258,7 +272,8 @@ def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
         render_poll=render_poll,
         PRESET_REACTIONS=PRESET_REACTIONS,
         mfm_parse=mfm_parse,
-        print=print
+        print=print,
+        render_icon=render_icon
     )
 
 def render_message_element(message: dict, receiverId: str):
@@ -803,7 +818,8 @@ def follow_requests():
     return render_template('app/follow_requests.html',
         follow_requests=follow_requests,
         emoji_convert=emoji_convert,
-        make_mediaproxy_url=make_mediaproxy_url
+        make_mediaproxy_url=make_mediaproxy_url,
+        render_icon=render_icon
     )
 
 @app.route('/settings', methods=['GET', 'POST'])
@@ -1475,12 +1491,14 @@ def user_detail(acct: str):
         make_mediaproxy_url=make_mediaproxy_url,
         emoji_convert=emoji_convert,
         mention2link=mention2link,
-        cleantext=cleantext
+        cleantext=cleantext,
+        render_icon=render_icon,
+        sort_roles=sort_roles
     )
 
 @app.route('/mediaproxy/<path:path>')
 @inject_client_settings
-def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, lq: bool = False):
+def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, png: bool = False, lq: bool = False):
 
     alwayscnvjpeg = request.client_settings['alwaysConvertJPEG']
 
@@ -1490,7 +1508,7 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, lq: bool = False
     if '/proxy/' in path:
         path = urllib.parse.unquote(path.split('?url=')[1])
 
-    cache_key = re.sub(r'[^a-zA-Z0-9\.]', '_', path) + f'{hq=}{jpeg=}{lq=}'
+    cache_key = re.sub(r'[^a-zA-Z0-9\.]', '_', path) + f'{hq=}{jpeg=}{png=}{lq=}'
     cache_name = hashlib.sha256(cache_key.encode()).hexdigest()
     if os.path.exists('mediaproxy_cache/' + cache_name):
         with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
@@ -1505,7 +1523,7 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, lq: bool = False
     res.headers['Cache-Control'] = 'public, max-age=1209600'
 
     convert_target_mime = ['image/png', 'image/jpeg', 'image/webp', 'image/heif', 'image/heic', 'image/avif']
-    if jpeg or alwayscnvjpeg:
+    if jpeg or png or alwayscnvjpeg:
         convert_target_mime.extend(['image/gif', 'image/apng'])
 
     ctype = r.headers['Content-Type']
@@ -1514,6 +1532,8 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, lq: bool = False
             ctype = m.id_buffer(r.content[:1024])
 
     convert_format = 'jpeg'
+    if png:
+        convert_format = 'png'
     if not (jpeg or alwayscnvjpeg):
         if 'image/webp' in request.headers['Accept']:
             convert_format = 'webp'
@@ -1581,6 +1601,10 @@ def mediaproxy_jpeg(path: str):
 @app.route('/mediaproxy_lq/<path:path>')
 def mediaproxy_lq(path: str):
     return mediaproxy(path, lq=True)
+
+@app.route('/mediaproxy_png/<path:path>')
+def mediaproxy_png(path: str):
+    return mediaproxy(path, png=True)
 
 @app.route('/emoji2image/<string:emoji_b64>')
 def emoji2image(emoji_b64: str):
