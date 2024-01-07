@@ -71,7 +71,8 @@ class EmojiStore:
         emoji_data = self._fetch_emoji_data(host)
         cur = self.db.cursor()
         s = time.time()
-        cur.execute('REPLACE INTO emoji_cache(host, data, last_updated) VALUES (?, ?, ?)', (host, orjson.dumps(emoji_data), math.floor(time.time())))
+        cur.execute('DELETE FROM emoji_cache WHERE host = ?', (host,))
+        cur.execute('INSERT INTO emoji_cache(host, data, last_updated) VALUES (?, ?, ?)', (host, orjson.dumps(emoji_data), math.floor(time.time())))
         #print(time.time() - s)
         self.db.commit()
         self.emoji_cache[host] = emoji_data
