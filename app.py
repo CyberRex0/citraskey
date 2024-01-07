@@ -1,3 +1,4 @@
+import glob
 import io
 import mimetypes
 import os
@@ -28,6 +29,7 @@ import datetime
 import magic
 import sys
 from modules.emojistore import EmojiStore
+from werkzeug.middleware.profiler import ProfilerMiddleware
 #from modules.mfmrenderer import BasicMFMRenderer
 
 def randomstr(size: int):
@@ -50,18 +52,20 @@ cur.close()
 db.commit()
 
 cur = emoji_db.cursor()
-cur.execute('CREATE TABLE IF NOT EXISTS emoji_cache(host TEXT, data TEXT, last_updated INTEGER)')
+cur.execute('CREATE TABLE IF NOT EXISTS emoji_cache(host TEXT PRIMARY KEY, data TEXT, last_updated INTEGER)')
 cur.close()
 emoji_db.commit()
 
-app = Flask(__name__, static_url_path='/static')
+app = Flask(__name__, static_url_path='/static', template_folder=os.path.abspath('templates'))
 app.secret_key = b'SECRET'
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SECRET_KEY'] = 'SECRET'
+#app.config['PROFILE'] = True
+#app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[30], profile_dir='./profiler/', filename_format='{method}-{path}.dump')
 Session(app)
 request.client_settings: dict
 
-HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15 Citraskey/0.0.1'
+HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Citraskey/0.0.1'
 
 http_session = requests.Session()
 http_session.headers['User-Agent'] = HTTP_USER_AGENT
@@ -79,6 +83,7 @@ MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM = '90'
 
 URL_REGEX = re.compile(r'(?!.*(?:"|>))(https?://[\w!?/+\-_~;.,*&@#$%()\'=:]+)')
 MISSKEY_EMOJI_REGEX = re.compile(r':([a-zA-Z0-9_]+)(?:@?)(|[a-zA-Z0-9\.-]+):')
+MENTION_REGEX = re.compile(r'@([0-9a-zA-Z\-\._@]+)')
 
 NOTIFICATION_TYPES = {
     'follow': 'にフォローされました',
@@ -99,6 +104,9 @@ PRESET_REACTIONS = ['👍', '❤️', '😆', '🤔', '🎉', '💢', '😥', '�
 for d in SYS_DIRS:
     if not os.path.exists(d):
         os.makedirs(d)
+    else:
+        for f in glob.glob(f'{d}/*')+glob.glob(f'{d}/*.*'):
+            os.remove(f)
 
 def make_short_link(url: str):
     sid = randomstr(10)
@@ -174,8 +182,8 @@ def mfm_parse(text: str, host: str = None):
     #).render(text)
     #print(f'MFM Parse: {(time.time()-t)*1000:.2f}ms')
     txt = cleantext(text)
-    txt = markdown_render(txt)
     txt = renderURL(txt)
+    txt = markdown_render(txt)
     txt = mention2link(txt)
     txt = convert_tag(txt)
     txt = emoji_convert(txt, host)
@@ -222,12 +230,34 @@ def render_reaction_picker_element(note_id: str, reactions: List[dict]):
         reactionEls.append(f'<span><img src="{make_mediaproxy_url(r["url"], jpeg=True)}" class="emoji-in-text note-reaction-available note-reaction-picker-child-{note_id}" data-note-id="{note_id}" data-reaction-content=":{r["name"]}:" data-reaction-type="custom"></span>')
     return ''.join(reactionEls)
 
+def render_markdown_simple(markdown_text: str):
+    # 強調のパース
+    markdown_text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', markdown_text)
+    markdown_text = re.sub(r'__(.*?)__', r'<strong>\1</strong>', markdown_text)
+
+    # 斜体のパース
+    markdown_text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', markdown_text)
+    markdown_text = re.sub(r'_(.*?)_', r'<em>\1</em>', markdown_text)
+
+    # リンクのパース
+    markdown_text = re.sub(r'\[([^\]]+?)\]\(([^)]+?)\)', r'<a href="\2">\1</a>', markdown_text)
+
+    markdown_text = markdown_text.replace('\n', '<br/>')
+
+    if markdown_text.startswith('<p>'):
+        markdown_text = markdown_text[3:]
+    if markdown_text.endswith('</p>'):
+        markdown_text = markdown_text[:-4]
+
+    return markdown_text
+
 def markdown_render(text: str):
-    t = markdown.markdown(text)
-    if t.startswith('<p>'):
-        t = t[3:]
-    if t.endswith('</p>'):
-        t = t[:-4]
+    #t = markdown.markdown(text)
+    #if t.startswith('<p>'):
+    #    t = t[3:]
+    #if t.endswith('</p>'):
+    #    t = t[:-4]
+    t = render_markdown_simple(text)
     return t
 
 def cleantext(text: str):
@@ -242,7 +272,19 @@ def convert_tag(text: str):
     return re.sub(r'(^|\s)#(\w+)', r'\1<a href="/search?type=tags&q=\2">#\2</a>', text)
 
 def mention2link(text: str):
-    return re.sub(r'@([0-9a-zA-Z\-\._@]+)', r'<a href="/@\1">@\1</a>', text)
+
+    def replace(match):
+        username = match.group(1)
+        # 既存のURLの一部でない場合にのみ置換
+        if not re.search(r'https?://[^\s]*@' + re.escape(username), text):
+            return f'<a href="/@{username}">@{username}</a>'
+        else:
+            return match.group(0)
+
+    result = MENTION_REGEX.sub(replace, text)
+
+    return result
+    #return re.sub(r'@([0-9a-zA-Z\-\._@]+)', r'<a href="/@\1">@\1</a>', text)
 
 def render_note_element(note: dict, option_data: dict, nest_count: int = 1):
     if nest_count < 0:
@@ -686,7 +728,7 @@ def home_timeline():
     if timeline_type == 'media' or tl == 'media-timeline':
         tl = 'hybrid-timeline'
         payload['withFiles'] = True
-        payload['withReplies'] = True
+        payload['withReplies'] = False
     ok, notes, r = api(f'/api/notes/{tl}', host=row['host'], json=payload, timeout=10)
     if not ok:
         return make_response(f'Timeline failed ({r.status_code})', 400)
@@ -1493,7 +1535,8 @@ def user_detail(acct: str):
         mention2link=mention2link,
         cleantext=cleantext,
         render_icon=render_icon,
-        sort_roles=sort_roles
+        sort_roles=sort_roles,
+        mfm_parse=mfm_parse
     )
 
 @app.route('/mediaproxy/<path:path>')
@@ -1568,7 +1611,7 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, png: bool = Fals
             gm_args.insert(7, '-type')
             gm_args.insert(8, 'truecolor')
         
-        print(gm_args)
+        #print(gm_args)
         
         gm = subprocess.Popen(gm_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         stdout, stderr = gm.communicate(r.content)
