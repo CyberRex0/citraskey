@@ -93,7 +93,7 @@
             <br>
             {% if user['description'] %}
                 <p class="user-description">
-                    {{ mention2link(emoji_convert(cleantext(user['description']), user['host'] or session['host']).replace('\n', '<br>')) | safe }}
+                    {{ mfm_parse(user['description'], user['host'] or session['host']) | safe }}
                 </p>
             {% endif %}
         </div>
