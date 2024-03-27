@@ -32,6 +32,18 @@ from modules.emojistore import EmojiStore
 from werkzeug.middleware.profiler import ProfilerMiddleware
 #from modules.mfmrenderer import BasicMFMRenderer
 
+APP_VER = '2024.03.27'
+
+try:
+    gbres = subprocess.check_output(["git", "branch", "--show-current"])
+    gres = subprocess.check_output(["git", "show", "--format=%h", "--no-patch"])
+    APP_GITINFO = {
+        'branch': gbres.decode().strip(),
+        'commit': gres.decode().strip()
+    }
+except:
+    APP_GITINFO = None
+
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
 
@@ -494,7 +506,7 @@ def root():
     if session.get('logged_in'):
         return home_timeline()
     else:
-        return render_template('index.html')
+        return render_template('index.html', app_ver=APP_VER)
 
 @app.route('/favicon.ico')
 def favicon():
@@ -870,7 +882,7 @@ def follow_requests():
 def settings():
 
     if request.method == 'GET':
-        return render_template('app/settings.html', settings=request.client_settings, updated=False)
+        return render_template('app/settings.html', settings=request.client_settings, app_ver=APP_VER, app_gitinfo=APP_GITINFO, updated=False)
     
     if request.method == 'POST':
         alwaysConvertJPEG = 1 if request.form.get('alwaysConvertJPEG')=='on' else 0
@@ -884,7 +896,7 @@ def settings():
         cur.close()
         db.commit()
 
-        return render_template('app/settings.html', settings=row, updated=True)
+        return render_template('app/settings.html', settings=row, app_ver=APP_VER, app_gitinfo=APP_GITINFO, updated=True)
 
 @app.route('/note-form', methods=['GET'])
 @login_check
@@ -972,7 +984,7 @@ def api_post():
     if upload_file:
         m = Misskey(address=session['host'], i=session['misskey_token'], session=http_session)
         try:
-            f = m.drive_files_create(file=upload_file.stream)
+            f = m.drive_files_create(file=upload_file.stream, name=upload_file.filename)
         except:
             traceback.print_exc()
             return make_response('Upload failed', 500)
