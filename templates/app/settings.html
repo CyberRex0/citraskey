@@ -21,7 +21,13 @@
                 <input type="submit" value="適用">
             </form>
             <br>
-            <br>
+            <hr size="1">
+            <p style="font-size:8pt">
+                Citraskey Ver.{{ app_ver }}<br>
+                {% if app_gitinfo %}
+                Git {{ app_gitinfo['commit'] }} from {{ app_gitinfo['branch'] }} branch
+                {% endif %}
+            </p>
             <a href="javascript:confirmLogout()"><button style="color:red">ログアウト</button></a>
         </div>
         {% include "app/components/footer.html" %}
