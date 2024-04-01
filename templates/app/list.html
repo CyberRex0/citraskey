@@ -5,11 +5,13 @@
     </head>
     <body>
         <div class="m4">
-            <a href="/">ホーム</a>
+            <a href="/">ホーム</a> &gt; リスト
             <hr size="1">
             {% for l in lst %}
                 <li><a href="/list/view/{{ l['id'] }}">{{ l['name'] }}</a></li>
+            {% else %}
+                ありません
             {% endfor %}
         </div>
     </body>
-    </html>
+</html>

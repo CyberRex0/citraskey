@@ -1,12 +1,12 @@
 <html>
     <head>
         {% include "app/components/head.html" %}
-        <title>Citraskey | アンテナタイムライン</title>
+        <title>Citraskey | アンテナ: {{ info['name'] }}</title>
     </head>
     <body>
         <div class="m4">
             <a href="/">ホーム</a> | <a href="/antenna">アンテナ一覧</a>
-            <h2>{{ info['name'] }}</h2>
+            <h2><img src="/static/image/antenna.png" style="width: 1em;"> {{ info['name'] }}</h2>
             <hr size="1">
             {% autoescape false %}
             {% for note in notes %}
@@ -22,4 +22,4 @@
         {% endif %}
         {% include "app/components/footer.html" %}
     </body>
-    </html>
+</html>

@@ -9,6 +9,8 @@
             <hr size="1">
             {% for l in antennas %}
                 <li><a href="/antenna/view/{{ l['id'] }}">{{ l['name'] }}</a></li>
+            {% else %}
+                ありません
             {% endfor %}
         </div>
     </body>

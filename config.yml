@@ -1,0 +1,5 @@
+flask:
+  # !!! session_secret MUST BE CHANGED IN PRODUCTION !!!
+  session_secret: debug
+  
+  enable_profiler: false

@@ -28,11 +28,17 @@ from functools import wraps
 import datetime
 import magic
 import sys
+from modules.classes import ConfigT
 from modules.emojistore import EmojiStore
 from werkzeug.middleware.profiler import ProfilerMiddleware
+import yaml
+try:
+    from yaml import CLoader as PyYAMLLoader, CDumper as PyYAMLDumper
+except ImportError:
+    from yaml import Loader as PyYAMLLoader, Dumper as PyYAMLDumper
 #from modules.mfmrenderer import BasicMFMRenderer
 
-APP_VER = '2024.03.27'
+APP_VER = '2024.04.01'
 
 try:
     gbres = subprocess.check_output(["git", "branch", "--show-current"])
@@ -44,8 +50,7 @@ try:
 except:
     APP_GITINFO = None
 
-def randomstr(size: int):
-    return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
+config: ConfigT = yaml.load(stream=open('config.yml'), Loader=PyYAMLLoader)
 
 sys.setrecursionlimit(16389)
 
@@ -59,7 +64,7 @@ cur = db.cursor()
 cur.execute('CREATE TABLE IF NOT EXISTS auth_session (id TEXT, mi_session_id TEXT, misskey_token TEXT, host TEXT, acct TEXT, callback_auth_code TEXT, ready INTEGER, auth_url TEXT, auth_qr_base64 TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS users (id TEXT, acct TEXT, misskey_token TEXT, host TEXT)')
 cur.execute('CREATE TABLE IF NOT EXISTS shortlink (sid TEXT, url TEXT)')
-cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER DEFAULT 0, enableScriptLess INTEGER DEFAULT 0, timeline TEXT, enableImageThumbnail INTEGER DEFAULT 1)')
+cur.execute('CREATE TABLE IF NOT EXISTS settings(acct TEXT, alwaysConvertJPEG INTEGER DEFAULT 0, enableScriptLess INTEGER DEFAULT 0, timeline TEXT, enableImageThumbnail INTEGER DEFAULT 1, enableDatasaveIcon INTEGER DEFAULT 0)')
 cur.close()
 db.commit()
 
@@ -69,15 +74,16 @@ cur.close()
 emoji_db.commit()
 
 app = Flask(__name__, static_url_path='/static', template_folder=os.path.abspath('templates'))
-app.secret_key = b'SECRET'
+app.secret_key = config['flask']['session_secret']
+app.config['SECRET_KEY'] = config['flask']['session_secret']
 app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SECRET_KEY'] = 'SECRET'
-#app.config['PROFILE'] = True
-#app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[30], profile_dir='./profiler/', filename_format='{method}-{path}.dump')
+if config['flask']['enable_profiler']:
+    app.config['PROFILE'] = True
+    app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[30], profile_dir='./profiler/', filename_format='{method}-{path}.dump')
 Session(app)
 request.client_settings: dict
 
-HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Citraskey/0.0.1'
+HTTP_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Citraskey/' + APP_VER
 
 http_session = requests.Session()
 http_session.headers['User-Agent'] = HTTP_USER_AGENT
@@ -120,6 +126,9 @@ for d in SYS_DIRS:
         for f in glob.glob(f'{d}/*')+glob.glob(f'{d}/*.*'):
             os.remove(f)
 
+def randomstr(size: int):
+    return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
+
 def make_short_link(url: str):
     sid = randomstr(10)
 
@@ -157,7 +166,8 @@ def parse_misskey_emoji(host, tx):
     return emojis
 
 def render_icon(user: dict, icon_class: str = 'icon-in-note'):
-    if user.get('avatarDecorations'):
+    data_saver = request.client_settings['enableDatasaveIcon']
+    if (not data_saver) and user.get('avatarDecorations'):
         html_s = f'<div style="position:relative"><img src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
         html_m = []
         for dec in user['avatarDecorations']:
@@ -165,7 +175,10 @@ def render_icon(user: dict, icon_class: str = 'icon-in-note'):
         html_e = '</div>'
         return html_s + (''.join(html_m)) + html_e
     else:
-        return f'<img src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
+        if not data_saver:
+            return f'<img src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
+        else:
+            return f'<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAAGklEQVRIx+3BMQEAAADCoPVP7W8GoAAAAOANDi4AAbvaTIQAAAAASUVORK5CYII=" class="{icon_class}">'
 
 def sort_roles(roles: List[dict]):
     return sorted(roles, key=lambda v: v['displayOrder'], reverse=True)
@@ -457,6 +470,9 @@ def api(url, host: str = None, method: str = 'POST', decode_json: bool = True, *
             obj = r.json()
         return False, obj, r
 
+def formcheck2bool(formVal):
+    return 1 if formVal == 'on' else 0
+
 def login_check(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -545,6 +561,7 @@ def auth_start():
             MisskeyPermissions.READ_FOLLOWING,
             MisskeyPermissions.READ_MUTES,
             MisskeyPermissions.READ_BLOCKS,
+            MisskeyPermissions.READ_CHANNELS,
 
             MisskeyPermissions.WRITE_ACCOUNT,
             MisskeyPermissions.WRITE_DRIVE,
@@ -554,7 +571,8 @@ def auth_start():
             MisskeyPermissions.WRITE_MESSAGING,
             MisskeyPermissions.WRITE_FOLLOWING,
             MisskeyPermissions.WRITE_MUTES,
-            MisskeyPermissions.WRITE_BLOCKS
+            MisskeyPermissions.WRITE_BLOCKS,
+            MisskeyPermissions.WRITE_CHANNELS
 
         ]]),
         'callback': callback_url
@@ -864,6 +882,7 @@ def messaging_user(user_id):
 
 @app.route('/follow-requests')
 @login_check
+@inject_client_settings
 def follow_requests():
     ok, follow_requests, r = api(f'/api/following/requests/list', json={'i': session['misskey_token']})
     if not ok:
@@ -885,12 +904,13 @@ def settings():
         return render_template('app/settings.html', settings=request.client_settings, app_ver=APP_VER, app_gitinfo=APP_GITINFO, updated=False)
     
     if request.method == 'POST':
-        alwaysConvertJPEG = 1 if request.form.get('alwaysConvertJPEG')=='on' else 0
-        enableScriptLess = 1 if request.form.get('enableScriptLess')=='on' else 0
+        alwaysConvertJPEG = formcheck2bool(request.form.get('alwaysConvertJPEG'))
+        enableScriptLess = formcheck2bool(request.form.get('enableScriptLess'))
         enableImageThumbnail = 1 if request.form.get('enableImageThumbnail')=='on' else 0
+        enableDatasaveIcon = 1 if request.form.get('enableDatasaveIcon')=='on' else 0
 
         cur = db.cursor()
-        cur.execute('UPDATE settings SET alwaysConvertJPEG = ?, enableScriptLess = ?, enableImageThumbnail = ? WHERE acct = ?', (alwaysConvertJPEG, enableScriptLess, enableImageThumbnail, session['acct']))
+        cur.execute('UPDATE settings SET alwaysConvertJPEG = ?, enableScriptLess = ?, enableImageThumbnail = ?, enableDatasaveIcon = ? WHERE acct = ?', (alwaysConvertJPEG, enableScriptLess, enableImageThumbnail, enableDatasaveIcon, session['acct']))
         cur.execute('SELECT * FROM settings WHERE acct = ?', (session['acct'],))
         row = cur.fetchone()
         cur.close()
@@ -958,6 +978,38 @@ def my_antenna_view(antenna_id: str):
     if not ok:
         return make_response('Fetch antenna show failed.', 500)
     return render_template('app/antenna_view.html', info=antinfo, notes=notes, render_note_element=render_note_element)
+
+@app.route('/channel', methods=['GET'])
+@login_check
+def my_channel():
+
+    ok, channels, r = api('/api/channels/followed', json={'i': session['misskey_token']})
+    if not ok:
+        return make_response('Fetch following channels failed.', 500)
+
+    ok, ownedchannels, r = api('/api/channels/owned', json={'i': session['misskey_token']})
+    if not ok:
+        return make_response('Fetch owned channels failed.', 500)
+
+    return render_template('app/channel.html', channels=channels, ownedchannels=ownedchannels)
+
+@app.route('/channel/view/<string:channel_id>', methods=['GET'])
+@login_check
+@inject_client_settings
+def channel_view(channel_id: str):
+
+    ok, chinfo, r = api('/api/channels/show', json={'i': session['misskey_token'], 'channelId': channel_id})
+    if not ok:
+        return make_response('Fetch channel failed.', 500)
+
+    payload = {'channelId': channel_id, 'i': session['misskey_token']}
+    if request.args.get('untilId'):
+        payload['untilId'] = request.args.get('untilId')
+
+    ok, notes, r = api('/api/channels/timeline', json=payload)
+    if not ok:
+        return make_response('Fetch channel timeline failed.', 500)
+    return render_template('app/channel_view.html', info=chinfo, notes=notes, render_note_element=render_note_element)
 
 @app.route('/api/notes/create', methods=['POST'])
 @login_check

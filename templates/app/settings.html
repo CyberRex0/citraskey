@@ -18,6 +18,8 @@
                 <br>
                 <input type="checkbox" id="settings-form-imagethumbnail" name="enableImageThumbnail" {{ 'checked' if settings['enableImageThumbnail'] else '' }}><label for="settings-form-imagethumbnail"> 画像のサムネイルを表示する</label>
                 <br>
+                <input type="checkbox" id="settings-form-datasaveicon" name="enableDatasaveIcon" {{ 'checked' if settings['enableDatasaveIcon'] else '' }}><label for="settings-form-datasaveicon"> ユーザーのアイコンを表示しない</label>
+                <br>
                 <input type="submit" value="適用">
             </form>
             <br>
