@@ -18,8 +18,18 @@
                 </td>
             </tr>
         </table>
-        {% if not renote %}<img src="/static/image/visibility/{{ note['visibility'] }}.png" class="visibility-icon" style="position:absolute; right: 2px; top: 2px;">{% endif %}
+        <span style="position:absolute; right: 2px; top: 2px;">
+        {% if note['localOnly'] %}<img src="/static/image/visibility/localonly.png" class="visibility-icon">{% endif %}
+        {% if not renote %}<img src="/static/image/visibility/{{ note['visibility'] }}.png" class="visibility-icon">{% endif %}
+        </span>
     </div>
+
+    {% if note['channel'] %}
+    <p style="margin-bottom: 4px">
+        <img src="/static/image/channel.png" style="width: 0.8em"> <a href="/channel/view/{{ note['channel']['id'] }}" style="font-size: 0.6em">{{ note['channel']['name'] }}</a>
+    </p>
+    {% endif %}
+
     <p class="{{ 'hide' if not note['cw'] else '' }}">{{ mfm_parse(note['cw'] or '', host) }} <button id="note-cw-open-{{ note['id'] }}" onclick="noteContentVToggle('{{ note['id'] }}')">もっと見る</button></p>
 
     <div style="display: {{ 'none' if note['cw'] else 'block' }}" class="note-content" id="note-content-{{ note['id'] }}">
