@@ -1,0 +1,10 @@
+<div style="border: 1px solid black; border-radius: 2px; margin-bottom: 4px; padding: 2px;">
+    <p style="font-size: 1em"><a href="/channel/view/{{ channel['id'] }}">{{ channel['name'] }}</a></p>
+    {% if channel['description'] %}
+    {% set d = channel['description'][:100] + '...' if channel['description'].__len__()>100 else channel['description'] %}
+    {% autoescape False %}
+    <p style="font-size: 0.8em">{{ markdown_render(mention2link(emoji_convert(d, session['host']))) }}</p>
+    {% endautoescape %}
+    {% endif %}
+    <img src="/static/image/users.png" width="16"> {{ channel['usersCount'] }} &nbsp; <img src="/static/image/message-circle.png" width="16"> {{ channel['notesCount'] }}
+</div>

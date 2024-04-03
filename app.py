@@ -38,7 +38,7 @@ except ImportError:
     from yaml import Loader as PyYAMLLoader, Dumper as PyYAMLDumper
 #from modules.mfmrenderer import BasicMFMRenderer
 
-APP_VER = '2024.04.01'
+APP_VER = '2024.04.03'
 
 try:
     gbres = subprocess.check_output(["git", "branch", "--show-current"])
@@ -403,12 +403,12 @@ def render_poll(note_id: str, poll: dict):
     disabled = False
     status = ''
     if poll['expiresAt']:
-        dt = datetime.datetime.strptime(poll['expiresAt'], '%Y-%m-%dT%H:%M:%S.%fZ')
-        if dt < datetime.datetime.utcnow():
+        dt = datetime.datetime.strptime(poll['expiresAt'], '%Y-%m-%dT%H:%M:%S.%fZ').astimezone(datetime.timezone.utc)
+        if dt < datetime.datetime.now(datetime.timezone.utc):
             disabled = True
             status = '投票終了'
         else:
-            d = dt - datetime.datetime.utcnow()
+            d = dt - datetime.datetime.now(datetime.timezone.utc)
             status = f'あと{d.days}日{d.seconds // 3600}時間{d.seconds % 3600 // 60}分'
 
     if not poll['multiple']:
@@ -428,6 +428,46 @@ def render_poll(note_id: str, poll: dict):
         poll_lines.append(po)
     
     return '<table><tbody>' + (''.join(poll_lines)) + f'</tbody></table><small>{status}</small>'
+
+def render_channel_card(channel: dict):
+    return render_template('app/components/channel_card.html', channel=channel, emoji_convert=emoji_convert, markdown_render=markdown_render, mention2link=mention2link)
+
+def render_user_profile(user, tab: str = None, untilId: str = None):
+    notes_payload = {'i': session['misskey_token'], 'userId': user['id'], 'limit': 11, 'includeReplies': False}
+    if tab:
+        if tab == 'replies':
+            notes_payload['includeReplies'] = True
+        if tab == 'medias':
+            notes_payload['withFiles'] = True
+
+    if untilId:
+        notes_payload['untilId'] = untilId
+
+    if tab != 'pins':
+
+        ok, res, r2 = api(f'/api/users/notes', json=notes_payload)
+        if not ok:
+            if res.get('error'):
+                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
+        
+        notes = res
+    
+    else:
+
+        notes = user['pinnedNotes']
+    
+    return render_template('app/user_detail.html',
+        user=user,
+        notes=notes,
+        render_note_element=render_note_element,
+        make_mediaproxy_url=make_mediaproxy_url,
+        emoji_convert=emoji_convert,
+        mention2link=mention2link,
+        cleantext=cleantext,
+        render_icon=render_icon,
+        sort_roles=sort_roles,
+        mfm_parse=mfm_parse
+    )
 
 def error_json(error_id: int, reason: Optional[str] = None, internal: bool = False, status: int = None):
     return make_response(json.dumps({
@@ -991,7 +1031,7 @@ def my_channel():
     if not ok:
         return make_response('Fetch owned channels failed.', 500)
 
-    return render_template('app/channel.html', channels=channels, ownedchannels=ownedchannels)
+    return render_template('app/channel.html', channels=channels, ownedchannels=ownedchannels, render_channel_card=render_channel_card)
 
 @app.route('/channel/view/<string:channel_id>', methods=['GET'])
 @login_check
@@ -1010,6 +1050,44 @@ def channel_view(channel_id: str):
     if not ok:
         return make_response('Fetch channel timeline failed.', 500)
     return render_template('app/channel_view.html', info=chinfo, notes=notes, render_note_element=render_note_element)
+
+@app.route('/channel/discovery', methods=['GET'])
+@login_check
+@inject_client_settings
+def channel_discovery():
+
+    ok, channels, r = api('/api/channels/featured', json={'i': session['misskey_token']})
+    if not ok:
+        return make_response('Fetch channels failed.', 500)
+
+    return render_template('app/channel_discovery.html', channels=channels, render_channel_card=render_channel_card)
+
+@app.route('/channel/search', methods=['GET'])
+@login_check
+@inject_client_settings
+def channel_search():
+
+    q = request.args.get('q')
+    if not q:
+        return render_template('app/channel_search.html', channels=None, next_url=None)
+
+    untilId = request.args.get('untilId')
+
+    payload = {'i': session['misskey_token'], 'query': q}
+
+    if untilId:
+        payload['untilId'] = untilId
+
+    ok, channels, r = api('/api/channels/search', json=payload)
+    if not ok:
+        return make_response('Fetch channel search failed.', 500)
+
+    if len(channels) > 0:
+        next_url = f'/channel/search?q={urllib.parse.quote(q)}&untilId={channels[-1]["id"]}'
+    else:
+        next_url = None
+    
+    return render_template('app/channel_search.html', channels=channels, render_channel_card=render_channel_card, next_url=next_url, q=q)
 
 @app.route('/api/notes/create', methods=['POST'])
 @login_check
@@ -1526,10 +1604,38 @@ def api_i_follow_requests_reject():
     
     return redirect(f'/follow-requests')
 
+@app.route('/api/channel/follow', methods=['POST'])
+@login_check
+def api_channel_follow():
+    channel_id = request.form.get('channelId')
+    if not channel_id:
+        return make_response('channelId is required', 400)
+    
+    ok, res, r = api('/api/channels/follow', json={'i': session['misskey_token'], 'channelId': channel_id})
+    if not ok:
+        return make_response('channel follow failed.', 500)
+
+    return redirect(f'/channel/view/{channel_id}')
+
+@app.route('/api/channel/unfollow', methods=['POST'])
+@login_check
+def api_channel_unfollow():
+    channel_id = request.form.get('channelId')
+    if not channel_id:
+        return make_response('channelId is required', 400)
+    
+    ok, res, r = api('/api/channels/unfollow', json={'i': session['misskey_token'], 'channelId': channel_id})
+    if not ok:
+        return make_response('channel unfollow failed.', 500)
+
+    return redirect(f'/channel/view/{channel_id}')
 
 @app.route('/users/<string:user_id>')
 @login_check
 def user_detail_id(user_id: str):
+
+    untilId = request.args.get('untilId')
+    tab = request.args.get('tab')
 
     ok, res, r = api(f'/api/users/show', json={'i': session['misskey_token'], 'userId': user_id})
     if not ok:
@@ -1538,7 +1644,8 @@ def user_detail_id(user_id: str):
                 return make_response('ユーザーが削除されているか、存在しません。', 404)
             return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 400)
     
-    return redirect('/@' + res['username'] + ('@' + res['host'] if res['host'] else ''))
+    #return redirect('/@' + res['username'] + ('@' + res['host'] if res['host'] else ''))
+    return render_user_profile(user=res, untilId=untilId, tab=tab)
 
 @app.route('/@<string:acct>')
 @login_check
@@ -1565,43 +1672,7 @@ def user_detail(acct: str):
                 return make_response('ユーザーが削除されているか、存在しません。', 404)
             return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
     
-    user = res
-    
-    notes_payload = {'i': session['misskey_token'], 'userId': user['id'], 'limit': 11, 'includeReplies': False}
-    if tab:
-        if tab == 'replies':
-            notes_payload['includeReplies'] = True
-        if tab == 'medias':
-            notes_payload['withFiles'] = True
-
-    if untilId:
-        notes_payload['untilId'] = untilId
-
-    if tab != 'pins':
-
-        ok, res, r2 = api(f'/api/users/notes', json=notes_payload)
-        if not ok:
-            if res.get('error'):
-                return make_response(f'{res["error"]["message"]}<br>{res["error"]["code"]}', 500)
-        
-        notes = res
-    
-    else:
-
-        notes = user['pinnedNotes']
-    
-    return render_template('app/user_detail.html',
-        user=user,
-        notes=notes,
-        render_note_element=render_note_element,
-        make_mediaproxy_url=make_mediaproxy_url,
-        emoji_convert=emoji_convert,
-        mention2link=mention2link,
-        cleantext=cleantext,
-        render_icon=render_icon,
-        sort_roles=sort_roles,
-        mfm_parse=mfm_parse
-    )
+    return render_user_profile(user=res, untilId=untilId, tab=tab)
 
 @app.route('/mediaproxy/<path:path>')
 @inject_client_settings

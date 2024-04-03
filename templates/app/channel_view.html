@@ -6,7 +6,12 @@
     <body>
         <div class="m4">
             <a href="/">ホーム</a> | <a href="/channel">チャンネル一覧</a>
-            <h2><img src="/static/image/channel.png" style="width: 1em;"> {{ info['name'] }}</h2>
+            <h3><img src="/static/image/channel.png" style="width: 1em;"> {{ info['name'] }}</h3>
+            <form action="/api/channel/{{ 'follow' if not info['isFollowing'] else 'unfollow' }}" method="POST">
+                <input type="hidden" name="channelId" value="{{ info['id'] }}">
+                <input style="float: right;" type="submit" value="フォロー{{ '解除' if info['isFollowing'] }}する">
+            </form>
+            <br>
             <hr size="1">
             {% autoescape false %}
             {% for note in notes %}

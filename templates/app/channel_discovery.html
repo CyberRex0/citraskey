@@ -1,0 +1,27 @@
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | チャンネルをさがす</title>
+    </head>
+    <body>
+        <div class="m4">
+            <a href="/">ホーム</a> | <a href="/channel">チャンネル一覧</a>
+            <hr size="1">
+            <form action="/channel/search" method="GET">
+                <input type="text" name="q" placeholder="チャンネルを検索..." style="width: 80%"><input type="submit" value="検索">
+            </form>
+            <h3>人気のチャンネル</h3>
+            {% for c in channels %}
+            {% autoescape False %}
+             {{ render_channel_card(c) }}
+            {% endautoescape %}
+            {% else %}
+                ありません
+            {% endfor %}
+            <br>
+            <form action="/channel/search" method="GET">
+                <input type="text" name="q" placeholder="チャンネルを検索..." style="width: 80%"><input type="submit" value="検索">
+            </form>
+        </div>
+    </body>
+</html>

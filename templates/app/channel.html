@@ -5,18 +5,22 @@
     </head>
     <body>
         <div class="m4">
-            <a href="/">ホーム</a>
+            <a href="/">ホーム</a> | <img src="/static/image/search.png" style="width: 1em;"> <a href="/channel/discovery">チャンネルをさがす</a>
             <hr size="1">
             <h3>フォロー中のチャンネル</h3>
             {% for c in channels %}
-                <li><a href="/channel/view/{{ c['id'] }}">{{ c['name'] }}</a></li>
+            {% autoescape False %}
+                {{ render_channel_card(c) }}
+            {% endautoescape %}
             {% else %}
                 ありません
             {% endfor %}
             <br>
             <h3>作成したチャンネル</h3>
             {% for c in ownedchannels %}
-                <li><a href="/channel/view/{{ c['id'] }}">{{ c['name'] }}</a></li>
+            {% autoescape False %}
+                {{ render_channel_card(c) }}
+            {% endautoescape %}
             {% else %}
                 ありません
             {% endfor %}

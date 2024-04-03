@@ -1,0 +1,33 @@
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | チャンネルをさがす</title>
+    </head>
+    <body>
+        <div class="m4">
+            <a href="/">ホーム</a> | <a href="/channel">チャンネル一覧</a>
+            <hr size="1">
+            {% if channels != None %}
+            <h3><img src="/static/image/channel.png" style="width: 1em;"> "{{ q }}" の検索結果</h3>
+            {% else %}
+            <h3><img src="/static/image/channel.png" style="width: 1em;"> チャンネル検索</h3>
+            {% endif %}
+            <form action="/channel/search" method="GET">
+                <input type="text" name="q" placeholder="チャンネルを検索..." value="{{ q }}" style="width: 80%"><input type="submit" value="検索">
+            </form>
+            {% if channels != None %}
+            {% for c in channels %}
+            {% autoescape False %}
+                {{ render_channel_card(c) }}
+            {% endautoescape %}
+            {% else %}
+                見つかりませんでした
+            {% endfor %}
+            <br>
+            {% if channels.__len__() > 0 %}
+            <center><a href="{{ next_url }}">もっと見る</a></center>
+            {% endif %}
+            {% endif %}
+        </div>
+    </body>
+</html>
