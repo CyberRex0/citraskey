@@ -6,5 +6,5 @@
     <p style="font-size: 0.8em">{{ markdown_render(mention2link(emoji_convert(d, session['host']))) }}</p>
     {% endautoescape %}
     {% endif %}
-    <img src="/static/image/users.png" width="16"> {{ channel['usersCount'] }} &nbsp; <img src="/static/image/message-circle.png" width="16"> {{ channel['notesCount'] }}
+    <img src="/static/image/users.png" width="16"> {{ intcomma(channel['usersCount']) }} &nbsp; <img src="/static/image/message-circle.png" width="16"> {{ intcomma(channel['notesCount']) }}
 </div>

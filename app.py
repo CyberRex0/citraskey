@@ -38,7 +38,7 @@ except ImportError:
     from yaml import Loader as PyYAMLLoader, Dumper as PyYAMLDumper
 #from modules.mfmrenderer import BasicMFMRenderer
 
-APP_VER = '2024.04.03'
+APP_VER = '2024.04.04'
 
 try:
     gbres = subprocess.check_output(["git", "branch", "--show-current"])
@@ -125,6 +125,9 @@ for d in SYS_DIRS:
     else:
         for f in glob.glob(f'{d}/*')+glob.glob(f'{d}/*.*'):
             os.remove(f)
+
+def intcomma(i: int):
+    return f'{i:,}'
 
 def randomstr(size: int):
     return ''.join(random.choice('0123456789abcdefghijkmnpqrstuvwxyz') for _ in range(size))
@@ -467,6 +470,17 @@ def render_user_profile(user, tab: str = None, untilId: str = None):
         render_icon=render_icon,
         sort_roles=sort_roles,
         mfm_parse=mfm_parse
+    )
+
+def render_user_card(user):
+    return render_template('app/components/user_card.html',
+        user=user,
+        make_mediaproxy_url=make_mediaproxy_url,
+        emoji_convert=emoji_convert,
+        mention2link=mention2link,
+        render_icon=render_icon,
+        mfm_parse=mfm_parse,
+        markdown_render=markdown_render
     )
 
 def error_json(error_id: int, reason: Optional[str] = None, internal: bool = False, status: int = None):
@@ -841,7 +855,7 @@ def notifications():
 def search():
     q = request.args.get('q')
     if not q:
-        return render_template('app/search.html', notes=[], next_url='')
+        return render_template('app/search.html', results=[], next_url='')
         #return make_response('q is required', 400)
     
     search_type =  request.args.get('type')
@@ -850,7 +864,7 @@ def search():
     
     untilId = request.args.get('untilId')
     
-    if search_type not in ['notes', 'tags']:
+    if search_type not in ['notes', 'tags', 'users']:
         return make_response('invalid search type', 400)
     
     if search_type == 'notes':
@@ -864,7 +878,7 @@ def search():
         if notes:
             next_url = f'/search?type=notes&q={urllib.parse.quote(q)}&untilId={notes[-1]["id"]}'
         
-        return render_template('app/search.html', notes=notes, render_note_element=render_note_element, next_url=next_url)
+        return render_template('app/search.html', results=notes, render_note_element=render_note_element, next_url=next_url)
 
     elif search_type == 'tags':
         payload = {'i': session['misskey_token'], 'limit': 10, 'tag': q}
@@ -877,7 +891,38 @@ def search():
         if notes:
             next_url = f'/search?type=tags&q={urllib.parse.quote(q)}&untilId={notes[-1]["id"]}'
         
-        return render_template('app/search.html', notes=notes, render_note_element=render_note_element, next_url=next_url)
+        return render_template('app/search.html', results=notes, render_note_element=render_note_element, next_url=next_url)
+    
+    elif search_type == 'users':
+
+        if untilId and not untilId.isdigit():
+            return make_response('untilId must be integer', 400)
+        elif not untilId:
+            untilId = '0'
+        
+        userOrigin = request.args.get('userOrigin')
+
+        payload = {'i': session['misskey_token'], 'query': q, 'limit': 10, 'offset': int(untilId)}
+
+        if userOrigin:
+            if not (userOrigin in ['combined', 'local', 'remote']):
+                return make_response('userOrigin is invalid', 400)
+            
+            payload['origin'] = userOrigin
+
+        ok, users, r = api('/api/users/search', json=payload)
+        if not ok:
+            return make_response(f'failed ({r.status_code})', 500)
+
+        next_url = None
+        if users:
+            next_url_param = {'type': 'users', 'q': q, 'untilId': int(untilId) + max(10, len(users))}
+            if userOrigin:
+                next_url_param['userOrigin'] = userOrigin
+            next_url = '/search?' + urllib.parse.urlencode(next_url_param)
+        
+        return render_template('app/search.html', results=users, render_user_card=render_user_card, next_url=next_url)
+
 
 @app.route('/messaging', methods=['GET'])
 @login_check
@@ -1632,6 +1677,7 @@ def api_channel_unfollow():
 
 @app.route('/users/<string:user_id>')
 @login_check
+@inject_client_settings
 def user_detail_id(user_id: str):
 
     untilId = request.args.get('untilId')
@@ -1822,6 +1868,12 @@ def before_request():
             settings = dict(cur.fetchone())
             if settings.get('enableScriptLess'):
                 return make_response('', 200)
+
+@app.context_processor
+def inject_ctx():
+    return {
+        'intcomma': intcomma
+    }
 
 PORT = 8888
 if os.environ.get('PORT'):

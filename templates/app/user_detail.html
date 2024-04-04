@@ -63,7 +63,7 @@
                 </tbody>
             </table>
             <p style="font-size: 9pt">
-                <strong>{{ user['notesCount'] }}</strong> 投稿 &nbsp; <strong>{{ user['followingCount'] }}</strong> フォロー &nbsp; <strong>{{ user['followersCount'] }}</strong> フォロワー
+                <strong>{{ intcomma(user['notesCount']) }}</strong> 投稿 &nbsp; <strong>{{ intcomma(user['followingCount']) }}</strong> フォロー &nbsp; <strong>{{ intcomma(user['followersCount']) }}</strong> フォロワー
             </p>
             <div style="float: right;">
                 {% if user['id'] != session['i']['id'] %}

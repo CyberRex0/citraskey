@@ -222,3 +222,19 @@ body {
     border-radius: 2px;
     font-size: 8pt;
 }
+
+#form-search-user-option {
+    border: 1px solid #dddddd;
+    border-radius: 2px;
+    margin-top: 2em;
+    padding: 10px;
+    position: relative;
+}
+#form-search-user-option::before {
+    background-color: white;
+    color: #000;
+    content: 'ユーザー検索オプション';
+    left: 10px;
+    position: absolute;
+    top: -8px;
+}

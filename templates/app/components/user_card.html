@@ -1,0 +1,31 @@
+{% set acct = user['username'] + ('@' + user['host'] if user['host'] else '') %}
+<div style="border: 1px solid black; border-radius: 2px; margin-bottom: 4px; padding: 2px;">
+    <table class="table-flex">
+        <tbody>
+            <tr>
+                <td>{% autoescape False%}{{ render_icon(user) }}{% endautoescape %}</td>
+                <td style="font-size: 1em">
+                    {% autoescape False %}<a href="/users/{{ user['id'] }}">{{ emoji_convert(user['name'] or user['username'], user['host'] or session['host']) }}</a>{% endautoescape %}
+                    {% if user['isAdmin'] %}
+                        <span class="user-flag user-flag-admin">Admin</span>
+                    {% endif %}
+                    {% if user['isSilenced'] %}
+                        <span class="user-flag user-flag-silenced">Silenced</span>
+                    {% endif %}
+                    {% if user['isBot'] %}
+                        <span class="user-flag user-flag-bot">Bot</span>
+                    {% endif %}
+                    <br>
+                    <small>@{{ acct }}</small>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    {% if user['description'] %}
+    {% set d = user['description'][:100] + '...' if user['description'].__len__()>100 else user['description'] %}
+    {% autoescape False %}
+    <p style="font-size: 0.8em">{{ markdown_render(mention2link(emoji_convert(d, user['host'] or session['host']))) }}</p>
+    {% endautoescape %}
+    {% endif %}
+    <p style="font-size: 0.7em;"><strong>{{ intcomma(user['notesCount']) }}</strong> 投稿 {% if user.get('followingVisibility', True) %}&nbsp;<strong>{{ intcomma(user['followingCount']) }}</strong> フォロー{% endif %} {% if user.get('followersVisibility',True) %}&nbsp;<strong>{{ intcomma(user['followersCount']) }}</strong> フォロワー{% endif %}</p>
+</div>

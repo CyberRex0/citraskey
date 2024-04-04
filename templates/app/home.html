@@ -29,6 +29,12 @@
                     <div style="font-size: 9pt">
                         <input type="radio" id="searchbox-input-type-note" name="type" value="notes" checked><label for="searchbox-input-type-note">投稿</label>
                         <input type="radio" id="searchbox-input-type-tag" name="type" value="tags"><label for="searchbox-input-type-tag">タグ</label>
+                        <input type="radio" id="searchbox-input-type-user" name="type" value="users"><label for="searchbox-input-type-user">ユーザー</label>
+                    </div>
+                    <div style="font-size: 9pt" id="form-search-user-option">
+                        <input type="radio" id="searchbox-user-input-cat-all" name="userOrigin" value="combined" {{'checked' if request.args.get('userOrigin')=='combined'}}><label for="searchbox-user-input-cat-all">すべて</label>
+                        <input type="radio" id="searchbox-user-input-cat-local" name="userOrigin" value="local" {{'checked' if request.args.get('userOrigin')=='local'}}><label for="searchbox-user-input-cat-local">ローカル</label>
+                        <input type="radio" id="searchbox-user-input-cat-remote" name="userOrigin" value="remote" {{'checked' if request.args.get('userOrigin')=='remote'}}><label for="searchbox-user-input-cat-remote">リモート</label>
                     </div>
                 </form>
             </div>

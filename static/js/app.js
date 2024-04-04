@@ -523,4 +523,26 @@ window.addEventListener('load', function () {
         noteFormWaitScreen.style.display = 'none';
     }
 
+    var searchTypeRadioNote = document.getElementById('searchbox-input-type-note');
+    var searchTypeRadioTag = document.getElementById('searchbox-input-type-tag');
+    var searchTypeRadioUser = document.getElementById('searchbox-input-type-user');
+    var searchUserOption = document.getElementById('form-search-user-option');
+
+    if (searchTypeRadioNote && searchTypeRadioTag && searchTypeRadioUser && searchUserOption) {
+        searchTypeRadioNote.addEventListener('change', function (e) {
+            searchUserOption.style.display = 'none';
+        });
+        searchTypeRadioTag.addEventListener('change', function (e) {
+            searchUserOption.style.display = 'none';
+        });
+        searchTypeRadioUser.addEventListener('change', function (e) {
+            searchUserOption.style.display = 'block';
+        });
+
+        // 3DSバグ対策
+        if (!searchTypeRadioUser.checked) {
+            searchUserOption.style.display = 'none';
+        }
+    }
+
 });
