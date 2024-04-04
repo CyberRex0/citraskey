@@ -504,17 +504,22 @@ window.addEventListener('load', function () {
 
     var noteFormVisibility = document.getElementById('note-form-select-visibility');
     var noteFormLocalOnly = document.getElementById('nf_localonly');
+    var noteFormCookie_Extra_Key = '';
+    var noteFormChannelId = document.getElementById('note-form-channel-id');
+    if (noteFormChannelId) {
+        noteFormCookie_Extra_Key = '_' + noteFormChannelId.value;
+    }
 
     if (noteFormVisibility) {
-        noteFormVisibility.onchange = function (e) { Cookies.set('note-form-visibility', e.target.value, { expires: 365 }); }
-        if (Cookies.get('note-form-visibility')) {
-            noteFormVisibility.selectedIndex = NOTE_VISIBILITY[Cookies.get('note-form-visibility')];
+        noteFormVisibility.onchange = function (e) { Cookies.set('note-form-visibility' + noteFormCookie_Extra_Key, e.target.value, { expires: 365 }); }
+        if (Cookies.get('note-form-visibility' + noteFormCookie_Extra_Key)) {
+            noteFormVisibility.selectedIndex = NOTE_VISIBILITY[Cookies.get('note-form-visibility' + noteFormCookie_Extra_Key)];
         }
     }
     if (noteFormLocalOnly) {
-        noteFormLocalOnly.onchange = function (e) { Cookies.set('note-form-localonly', e.target.checked, { expires: 365 }); }
-        if (Cookies.get('note-form-localonly')) {
-            noteFormLocalOnly.checked = Cookies.get('note-form-localonly') === 'true';
+        noteFormLocalOnly.onchange = function (e) { Cookies.set('note-form-localonly' + noteFormCookie_Extra_Key, e.target.checked, { expires: 365 }); }
+        if (Cookies.get('note-form-localonly' + noteFormCookie_Extra_Key)) {
+            noteFormLocalOnly.checked = Cookies.get('note-form-localonly' + noteFormCookie_Extra_Key) === 'true';
         }
     }
 
@@ -538,11 +543,6 @@ window.addEventListener('load', function () {
         searchTypeRadioUser.addEventListener('change', function (e) {
             searchUserOption.style.display = 'block';
         });
-
-        // 3DSバグ対策
-        if (!searchTypeRadioUser.checked) {
-            searchUserOption.style.display = 'none';
-        }
     }
 
 });

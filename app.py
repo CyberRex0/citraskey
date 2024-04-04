@@ -1173,6 +1173,9 @@ def api_post():
     
     if request.form.get('visibility'):
         payload['visibility'] = request.form.get('visibility')
+    
+    if request.form.get('channelId'):
+        payload['channelId'] = request.form.get('channelId')
 
     ok, res, r = api(f'/api/notes/create', json=payload)
     if not ok:

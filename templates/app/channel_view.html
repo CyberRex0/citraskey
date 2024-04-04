@@ -12,6 +12,11 @@
                 <input style="float: right;" type="submit" value="フォロー{{ '解除' if info['isFollowing'] }}する">
             </form>
             <br>
+            {% if info['isFollowing'] %}
+                {% with channel_id = info['id'] %}
+                    {% include "app/components/note_form.html" %}
+                {% endwith %}
+            {% endif %}
             <hr size="1">
             {% autoescape false %}
             {% for note in notes %}

@@ -15,6 +15,9 @@
     <input style="width: 100%" id="note-form-submit" type="submit" value="ノート">
     <input type="hidden" id="note-form-note-id" name="renoteId" value="">
     <input type="hidden" id="note-form-reply-id" name="replyId" value="">
+    {% if channel_id %}
+    <input type="hidden" id="note-form-channel-id" name="channelId" value="{{ channel_id }}">
+    {% endif %}
 </form>
 {% if not request.client_settings.get('enableScriptLess') %}
 <div id="note-form-wait-screen">
