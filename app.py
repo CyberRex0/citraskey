@@ -38,7 +38,7 @@ except ImportError:
     from yaml import Loader as PyYAMLLoader, Dumper as PyYAMLDumper
 #from modules.mfmrenderer import BasicMFMRenderer
 
-APP_VER = '2024.04.04'
+APP_VER = '2024.04.14'
 
 try:
     gbres = subprocess.check_output(["git", "branch", "--show-current"])
@@ -1144,6 +1144,11 @@ def api_post():
     if not text:
         return make_response('text is required', 400)
     
+    # Emoji置き換え
+    text = text.replace('{unicode:WHITE_BLOCK}', '\U00002B1C')
+    text = text.replace('{unicode:YELLOW_BLOCK}', '\U0001F7E8')
+    text = text.replace('{unicode:GREEN_BLOCK}', '\U0001F7E9')
+    
     renote_id = request.form.get('renoteId')
     reply_id = request.form.get('replyId')
     if renote_id and reply_id:
@@ -1862,6 +1867,14 @@ def emoji2image(emoji_b64: str):
     
     return res
 
+@app.route('/game')
+def game_root():
+    return render_template('app/game.html')
+
+@app.route('/game/wordguess')
+def game_wordle():
+    return render_template('app/game/wordguess/index.html')
+
 @app.before_request
 def before_request():
     if request.path == '/static/js/app.js':
@@ -1882,4 +1895,5 @@ PORT = 8888
 if os.environ.get('PORT'):
     PORT = int(os.environ.get('PORT'))
 
-app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)

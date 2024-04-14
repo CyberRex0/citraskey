@@ -1,0 +1,94 @@
+{% macro keybtn(k) %}
+<input type="button" class="virtkey" value="{{ k }}" data-key="{{ k }}" style="font-size: 0.6em"/>
+{% endmacro %}
+
+<!DOCTYPE html>
+<html>
+    <head>
+        {% include "app/components/head.html" %}
+        <title>Citraskey | WordGuess</title>
+        <style>
+            .chartable th, .chartable td {
+                border: 1px solid black;
+                table-layout: fixed;
+            }
+            .chartable td {
+                table-layout: fixed;
+                border: 1px solid black;
+                width: 2em;
+                height: 2em;
+                text-align: center;
+            }
+            .chartable {
+                margin-bottom: 0.3em;
+            }
+            .char-ok {
+                background-color: rgb(79, 208, 99);
+                color: white;
+            }
+            .char-wrongpos {
+                background-color: rgb(215, 163, 58);
+                color: white;
+            }
+            .char-ng {
+                background-color: rgb(80, 80, 80);
+                color: white;
+            }
+            .charline-active {
+                border: 1px solid red !important;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="m4">
+            <a href="/">ホーム</a>
+            <hr size="1">
+            <h3><img src="/static/image/game/wordguess-icon.jpg" style="width: 1em;"> WordGuess</h3>
+            <br>
+            <div class="screen" id="screen_title">
+                <input type="button" value="スタート" id="w-btn-start" style="width: 20em; min-height: 5em;" disabled />
+            </div>
+
+            <div class="screen" id="screen_main" style="display: none;">
+                <div>
+                    {% for i in range(1, 6 + 1) %}
+                    <table class="chartable" cellspacing="6" id="charline-{{ i }}">
+                        <tr>
+                            {% for j in range(1, 5 + 1) %}
+                                <td class="chars {{ 'charline-active' if i == 1 }}" id="char-{{i}}-{{j}}" data-line="{{ i }}" data-col="{{ j }}"> </td>
+                            {% endfor %}
+                        </tr>
+                    </table>
+                    {% endfor %}
+                </div>
+                <div id="main-controller">
+                    {% for k in "QWERTYUIOP" %}
+                        {{ keybtn(k) }}
+                    {% endfor %}
+                    <br>
+                    &nbsp;
+                    {% for k in "ASDFGHJKL" %}
+                        {{ keybtn(k) }}
+                    {% endfor %}
+                    <br>
+                    &nbsp;&nbsp;&nbsp;
+                    {% for k in "ZXCVBNM" %}
+                        {{ keybtn(k) }}
+                    {% endfor %}
+                    <br>
+                    <div style="float: right;">
+                        <input type="button" value="リセット" id="w-btn-reset" disabled>
+                        <input type="button" value="Go" id="w-btn-go" disabled>
+                    </div>
+                </div>
+                <div id="main-exit" style="display: none;">
+                    <input type="button" value="終了" id="w-btn-exit" style="width: 20em; min-height: 5em;" />
+                    <input type="button" value="共有" id="w-btn-exit-share" style="width: 20em; min-height: 5em;" />
+                </div>
+            </div>
+        </div>
+        {% include "app/components/footer.html" %}
+        <script type="text/javascript" src="/static/js/dist/class-change_1.js"></script>
+        <script type="text/javascript" src="/static/js/wordguessEngine.js"></script>
+    </body>
+</html>
