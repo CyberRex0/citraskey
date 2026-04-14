@@ -180,15 +180,15 @@ def parse_misskey_emoji(host, tx):
 def render_icon(user: dict, icon_class: str = 'icon-in-note'):
     data_saver = request.client_settings['enableDatasaveIcon']
     if (not data_saver) and user.get('avatarDecorations'):
-        html_s = f'<div style="position:relative"><img src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
+        html_s = f'<div style="position:relative"><img loading="lazy" src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
         html_m = []
         for dec in user['avatarDecorations']:
-            html_m.append(f'<img src="{make_mediaproxy_url(dec["url"], png=True)}" class="{icon_class} icon-decorated">')
+            html_m.append(f'<img loading="lazy" src="{make_mediaproxy_url(dec["url"], png=True)}" class="{icon_class} icon-decorated">')
         html_e = '</div>'
         return html_s + (''.join(html_m)) + html_e
     else:
         if not data_saver:
-            return f'<img src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
+            return f'<img loading="lazy" src="{make_mediaproxy_url(user["avatarUrl"])}" class="{icon_class}">'
         else:
             return f'<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAAGklEQVRIx+3BMQEAAADCoPVP7W8GoAAAAOANDi4AAbvaTIQAAAAASUVORK5CYII=" class="{icon_class}">'
 
@@ -198,12 +198,12 @@ def sort_roles(roles: List[dict]):
 def emoji_convert(tx: str, host):
     emojis = parse_misskey_emoji(host, tx)
     for emoji in emojis:
-        tx = tx.replace(f':{emoji["name"]}:', f'<img src="{make_mediaproxy_url(emoji["url"])}" class="emoji-in-text">')
+        tx = tx.replace(f':{emoji["name"]}:', f'<img loading="lazy" src="{make_mediaproxy_url(emoji["url"])}" class="emoji-in-text">')
     if not tx:
         return tx
     parsedUemojis = demoji.findall(tx)
     for k in parsedUemojis.keys():
-        tx = tx.replace(k, f'<img src="{make_emoji2image_url(k)}" class="emoji-in-text">')
+        tx = tx.replace(k, f'<img loading="lazy" src="{make_emoji2image_url(k)}" class="emoji-in-text">')
 
     return tx
 
@@ -245,16 +245,16 @@ def reactions_count_html(note_id: str, reactions: dict, my_reaction: Optional[st
             if ep:
                 e = ep[0]
                 if not request.client_settings['enableScriptLess']:
-                    emj = f'<img src="{make_mediaproxy_url(e["url"])}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{e["name"]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
+                    emj = f'<img loading="lazy" src="{make_mediaproxy_url(e["url"])}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{e["name"]}" data-reaction-type="custom" data-reaction-element-root="{uniqId}" />'
                 else:
                     emj = f'<a href="/api/notes/reaction?noteId={note_id}&reaction={e["name"]}&type=custom&direct=true"><img src="{make_mediaproxy_url(e["url"])}" class="emoji-in-text" /></a>'
         else:
             emd = demoji.findall(k)
             if emd:
                 is_unicode_emoji = True
-                emj = f'<img src="{make_emoji2image_url(k)}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{unicode_emoji_hex(k)}" data-reaction-type="unicode" data-reaction-element-root="{uniqId}" />'
+                emj = f'<img loading="lazy" src="{make_emoji2image_url(k)}" id="note-reaction-element-{uniqId2}" class="emoji-in-text" data-note-id="{note_id}" data-reaction-content="{unicode_emoji_hex(k)}" data-reaction-type="unicode" data-reaction-element-root="{uniqId}" />'
                 if request.client_settings['enableScriptLess']:
-                    emj = f'<a href="/api/notes/reaction?noteId={note_id}&reaction={unicode_emoji_hex(k)}&type=unicode&direct=true"><img src="{make_emoji2image_url(k)}" class="emoji-in-text" /></a>'
+                    emj = f'<a href="/api/notes/reaction?noteId={note_id}&reaction={unicode_emoji_hex(k)}&type=unicode&direct=true"><img loading="lazy" src="{make_emoji2image_url(k)}" class="emoji-in-text" /></a>'
 
         rhtm.append(f'<span id="note-reaction-element-root-{uniqId}" class="note-reaction-button-{note_id} {"note-reaction-selected" if k == my_reaction else ""} {"reactive-emoji note-reaction-available" if is_local_emoji or is_unicode_emoji else ""}" data-reaction-element-id="{uniqId2}">{emj}: {reactions[k]}</span>')
     
@@ -264,7 +264,7 @@ def reactions_count_html(note_id: str, reactions: dict, my_reaction: Optional[st
 def render_reaction_picker_element(note_id: str, reactions: List[dict]):
     reactionEls = []
     for r in reactions:
-        reactionEls.append(f'<span><img src="{make_mediaproxy_url(r["url"], jpeg=True)}" class="emoji-in-text note-reaction-available note-reaction-picker-child-{note_id}" data-note-id="{note_id}" data-reaction-content=":{r["name"]}:" data-reaction-type="custom"></span>')
+        reactionEls.append(f'<span><img loading="lazy" src="{make_mediaproxy_url(r["url"], jpeg=True)}" class="emoji-in-text note-reaction-available note-reaction-picker-child-{note_id}" data-note-id="{note_id}" data-reaction-content=":{r["name"]}:" data-reaction-type="custom"></span>')
     return ''.join(reactionEls)
 
 def render_markdown_simple(markdown_text: str):
@@ -395,7 +395,7 @@ def render_notification(n: dict):
         user_name = n["user"]["name"]
         user_acct_name = n["user"]["username"]
         user_name_emojis = n["user"]["emojis"]
-        htm = f'<a href="/users/{n["user"]["id"]}"><img src="{make_mediaproxy_url(user_avatar_url)}" width="18"></a> {emoji_convert(cleantext(user_name or user_acct_name), n["user"]["host"] or session["host"])} さん{ntypestring}<br>'
+        htm = f'<a href="/users/{n["user"]["id"]}"><img loading="lazy" src="{make_mediaproxy_url(user_avatar_url)}" width="18"></a> {emoji_convert(cleantext(user_name or user_acct_name), n["user"]["host"] or session["host"])} さん{ntypestring}<br>'
     else:
         #user_avatar_url = n["note"]["user"]["avatarUrl"]
         #user_name = n["note"]["user"]["name"]
