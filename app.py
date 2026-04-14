@@ -1,10 +1,12 @@
 import glob
+import asyncio
 import io
 import mimetypes
 import os
 import re
 from typing import List, Tuple
-from flask import Flask, make_response, redirect, render_template, send_file, send_from_directory, session, request
+from asgiref.wsgi import WsgiToAsgi
+from flask import Flask, current_app, make_response, redirect, render_template, send_file, send_from_directory, session, request
 from flask_session import Session
 import sqlite3
 import uuid
@@ -12,6 +14,7 @@ import random
 import qrcode
 import urllib.parse
 import base64
+import httpx
 import requests
 from misskey import Misskey
 from misskey.enum import Permissions as MisskeyPermissions
@@ -98,6 +101,12 @@ MEDIAPROXY_IMAGECOMP_LEVEL_HQ = '2'
 MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM = '35'
 MEDIAPROXY_IMAGECOMP_LEVEL_LQ_GM = '15'
 MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM = '90'
+try:
+    MEDIAPROXY_CONVERT_CONCURRENCY = max(1, int(os.environ.get('MEDIAPROXY_CONVERT_CONCURRENCY', '64')))
+except ValueError:
+    MEDIAPROXY_CONVERT_CONCURRENCY = 64
+_image_convert_semaphore = None
+_image_convert_semaphore_loop = None
 
 URL_REGEX = re.compile(r'(?!.*(?:"|>))(https?://[\w!?/+\-_~;.,*&@#$%()\'=:]+)')
 MISSKEY_EMOJI_REGEX = re.compile(r':([a-zA-Z0-9_]+)(?:@?)(|[a-zA-Z0-9\.-]+):')
@@ -558,8 +567,8 @@ def inject_client_settings(f):
             request.client_settings = dict(row)
         else:
             request.client_settings = {}
-        
-        return f(*args, **kwargs)
+
+        return current_app.ensure_sync(f)(*args, **kwargs)
 
     return decorated_function
 
@@ -1728,70 +1737,114 @@ def user_detail(acct: str):
     
     return render_user_profile(user=res, untilId=untilId, tab=tab)
 
-@app.route('/mediaproxy/<path:path>')
-@inject_client_settings
-def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, png: bool = False, lq: bool = False):
+def get_image_convert_semaphore():
+    global _image_convert_semaphore, _image_convert_semaphore_loop
+    loop = asyncio.get_running_loop()
+    if _image_convert_semaphore is None or _image_convert_semaphore_loop is not loop:
+        _image_convert_semaphore = asyncio.Semaphore(MEDIAPROXY_CONVERT_CONCURRENCY)
+        _image_convert_semaphore_loop = loop
+    return _image_convert_semaphore
 
-    alwayscnvjpeg = request.client_settings['alwaysConvertJPEG']
+
+def write_cache_file(cache_path: str, content: bytes):
+    with open(cache_path, 'wb') as f:
+        f.write(content)
+
+
+def send_mediaproxy_cache(cache_name: str):
+    cache_path = 'mediaproxy_cache/' + cache_name
+    with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
+        return send_file(cache_path, mimetype=m.id_filename(cache_path), max_age=1209600)
+
+
+async def run_image_convert(args: list[str], content: bytes):
+    try:
+        async with get_image_convert_semaphore():
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate(content)
+    except FileNotFoundError:
+        return 127, b'', b''
+    return proc.returncode, stdout, stderr
+
+
+async def _mediaproxy(path: str, hq: bool = False, jpeg: bool = False, png: bool = False, lq: bool = False):
+    alwayscnvjpeg = request.client_settings.get('alwaysConvertJPEG', 0)
+    accept_header = request.headers.get('Accept', '')
 
     path = base64.urlsafe_b64decode(path.encode()).decode()
-
     # Misskeyのバグ対策
     if '/proxy/' in path:
-        path = urllib.parse.unquote(path.split('?url=')[1])
+        #path = urllib.parse.unquote(path.split('?url=')[1])
+        parsed_path = urllib.parse.urlparse(path)
+        parsed_queries = urllib.parse.parse_qs(parsed_path.query)
+        proxy_url = parsed_queries.get('url')
+        if proxy_url:
+            path = proxy_url[0]
+        else:
+            return make_response('', 400)
 
     cache_key = re.sub(r'[^a-zA-Z0-9\.]', '_', path) + f'{hq=}{jpeg=}{png=}{lq=}'
     cache_name = hashlib.sha256(cache_key.encode()).hexdigest()
-    if os.path.exists('mediaproxy_cache/' + cache_name):
-        with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
-            return send_file('mediaproxy_cache/' + cache_name, mimetype=m.id_filename('mediaproxy_cache/' + cache_name), max_age=1209600)
+    convert_format = 'jpeg'
+    if png:
+        convert_format = 'png'
+    if not (jpeg or alwayscnvjpeg):
+        if 'image/webp' in accept_header:
+            convert_format = 'webp'
+        if 'image/avif' in accept_header:
+            convert_format = 'avif'
 
-    r = http_session.get(path)
+    gm_resize = '400>'
+    gm_quality = MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM
+    if hq:
+        gm_resize = '800>'
+        gm_quality = MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM
+    if lq:
+        gm_resize = '200>'
+        gm_quality = MEDIAPROXY_IMAGECOMP_LEVEL_LQ_GM
+
+    converted_cache_name = f'q{gm_quality}_{convert_format}_{cache_name}'
+    if os.path.exists('mediaproxy_cache/' + converted_cache_name):
+        return send_mediaproxy_cache(converted_cache_name)
+    if os.path.exists('mediaproxy_cache/' + cache_name):
+        return send_mediaproxy_cache(cache_name)
+
+    #print(path)
+
+    try:
+        async with httpx.AsyncClient(headers={'User-Agent': HTTP_USER_AGENT}, follow_redirects=True, timeout=10.0) as client:
+            r = await client.get(path)
+    except httpx.HTTPError:
+        return make_response('', 502)
+
     if r.status_code != 200:
         return make_response('', r.status_code)
-    
+
     res = make_response(r.content, 200)
-    res.headers['Content-Type'] = r.headers['Content-Type']
+    res.headers['Content-Type'] = r.headers.get('Content-Type', 'application/octet-stream')
     res.headers['Cache-Control'] = 'public, max-age=1209600'
 
     convert_target_mime = ['image/png', 'image/jpeg', 'image/webp', 'image/heif', 'image/heic', 'image/avif']
     if jpeg or png or alwayscnvjpeg:
         convert_target_mime.extend(['image/gif', 'image/apng'])
 
-    ctype = r.headers['Content-Type']
+    ctype = r.headers.get('Content-Type', '')
     if not ctype or ctype == 'application/octet-stream':
         with magic.Magic(flags=magic.MAGIC_MIME_TYPE) as m:
             ctype = m.id_buffer(r.content[:1024])
-
-    convert_format = 'jpeg'
-    if png:
-        convert_format = 'png'
-    if not (jpeg or alwayscnvjpeg):
-        if 'image/webp' in request.headers['Accept']:
-            convert_format = 'webp'
-        if 'image/avif' in request.headers['Accept']:
-            convert_format = 'avif'
+    else:
+        ctype = ctype.split(';', 1)[0].strip()
 
     if ctype in convert_target_mime:
         cache_name = convert_format + '_' + cache_name
-        #path = urllib.parse.unquote(path)
-        #ffmpeg_args = ['ffmpeg', '-i', path, '-user_agent', HTTP_USER_AGENT, '-loglevel', 'error', '-c:v', 'mjpeg', '-qscale:v', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL , '-vf', 'scale=400x240:force_original_aspect_ratio=decrease', '-vframes', '1', '-pix_fmt', 'yuvj420p', '-f', 'image2', '-']
-        #if hq:
-        #    ffmpeg_args[10] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ
-        #    ffmpeg_args[12] = 'scale=800x480:force_original_aspect_ratio=decrease'
-        #ffmpeg = subprocess.Popen(ffmpeg_args, stdout=subprocess.PIPE)
-        #stdout, stderr = ffmpeg.communicate()
-        #if ffmpeg.returncode != 0:
-        #    return make_response('', 500)
-        
-        gm_args = ['convert', '-resize', '400>', '-quality', MEDIAPROXY_IMAGECOMP_LEVEL_NORMAL_GM, '-', f'{convert_format}:-']
-        if hq:
-            gm_args[2] = '800>'
-            gm_args[4] = MEDIAPROXY_IMAGECOMP_LEVEL_HQ_GM
-        if lq:
-            gm_args[2] = '200>'
-            gm_args[4] = MEDIAPROXY_IMAGECOMP_LEVEL_LQ_GM
-        
+
+        gm_args = ['convert', '-resize', gm_resize, '-quality', gm_quality, '-', f'{convert_format}:-']
+
         if convert_format == 'jpeg':
             gm_args.insert(3, '-colorspace')
             gm_args.insert(4, 'sRGB')
@@ -1799,47 +1852,51 @@ def mediaproxy(path: str, hq: bool = False, jpeg: bool = False, png: bool = Fals
             gm_args.insert(6, '4:2:0')
             gm_args.insert(7, '-type')
             gm_args.insert(8, 'truecolor')
-        
+
         #print(gm_args)
-        
-        gm = subprocess.Popen(gm_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        stdout, stderr = gm.communicate(r.content)
-        if gm.returncode != 0:
+
+        returncode, stdout, stderr = await run_image_convert(gm_args, r.content)
+        if returncode != 0:
             return make_response('', 500)
-        
+
         res = make_response(stdout, 200)
         res.headers['Content-Type'] = 'image/' + convert_format
         res.headers['Cache-Control'] = 'public, max-age=1209600'
 
-        cache_name = f'q{gm_args[5]}_' + cache_name
-
-        with open('mediaproxy_cache/' + cache_name, 'wb') as f:
-            f.write(stdout)
+        cache_name = f'q{gm_quality}_' + cache_name
+        await asyncio.to_thread(write_cache_file, 'mediaproxy_cache/' + cache_name, stdout)
     else:
-        with open('mediaproxy_cache/' + cache_name, 'wb') as f:
-            f.write(r.content)
-    
+        await asyncio.to_thread(write_cache_file, 'mediaproxy_cache/' + cache_name, r.content)
+
     return res
+
+@app.route('/mediaproxy/<path:path>')
+@inject_client_settings
+async def mediaproxy(path: str):
+    return await _mediaproxy(path)
 
 @app.route('/mediaproxy_hq/<path:path>')
 @inject_client_settings
-def mediaproxy_hq(path: str):
-    return mediaproxy(path, hq=True)
+async def mediaproxy_hq(path: str):
+    return await _mediaproxy(path, hq=True)
 
 @app.route('/mediaproxy_jpeg/<path:path>')
-def mediaproxy_jpeg(path: str):
-    return mediaproxy(path, jpeg=True)
+@inject_client_settings
+async def mediaproxy_jpeg(path: str):
+    return await _mediaproxy(path, jpeg=True)
 
 @app.route('/mediaproxy_lq/<path:path>')
-def mediaproxy_lq(path: str):
-    return mediaproxy(path, lq=True)
+@inject_client_settings
+async def mediaproxy_lq(path: str):
+    return await _mediaproxy(path, lq=True)
 
 @app.route('/mediaproxy_png/<path:path>')
-def mediaproxy_png(path: str):
-    return mediaproxy(path, png=True)
+@inject_client_settings
+async def mediaproxy_png(path: str):
+    return await _mediaproxy(path, png=True)
 
 @app.route('/emoji2image/<string:emoji_b64>')
-def emoji2image(emoji_b64: str):
+async def emoji2image(emoji_b64: str):
 
     emoji = base64.urlsafe_b64decode(emoji_b64.encode()).decode()
 
@@ -1848,23 +1905,27 @@ def emoji2image(emoji_b64: str):
 
     if os.path.exists(emoji_cache_path):
         return send_file(emoji_cache_path, mimetype='image/png')
-    
+
     emoji_hex = hex(ord(emoji[0]))[2:]
-    r = http_session.get(f'https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/{emoji_hex}.svg')
+    try:
+        async with httpx.AsyncClient(headers={'User-Agent': HTTP_USER_AGENT}, follow_redirects=True, timeout=10.0) as client:
+            r = await client.get(f'https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/{emoji_hex}.svg')
+    except httpx.HTTPError:
+        return make_response('', 502)
+
     if r.status_code != 200:
         return make_response('', r.status_code)
-    
-    svgcnv = subprocess.Popen(['rsvg-convert', '-w', '64', '-h', '64', '/dev/stdin'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    stdout, stderr = svgcnv.communicate(input=r.content)
-    if svgcnv.returncode != 0:
+
+    returncode, stdout, stderr = await run_image_convert(['rsvg-convert', '-w', '64', '-h', '64', '/dev/stdin'], r.content)
+    if returncode != 0:
         return make_response('', 500)
     
     res = make_response(stdout, 200)
     res.headers['Content-Type'] = 'image/png'
+    res.headers['Cache-Control'] = 'max-age=604800'
 
-    with open(emoji_cache_path, 'wb') as f:
-        f.write(stdout)
-    
+    await asyncio.to_thread(write_cache_file, emoji_cache_path, stdout)
+
     return res
 
 @app.route('/game')
@@ -1890,6 +1951,8 @@ def inject_ctx():
     return {
         'intcomma': intcomma
     }
+
+asgi_app = WsgiToAsgi(app)
 
 PORT = 8888
 if os.environ.get('PORT'):
