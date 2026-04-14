@@ -1,0 +1,23 @@
+[project]
+name = "citraskey"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "demoji",
+    "filemagic>=1.6",
+    "flask>=3.1.3",
+    "flask-session>=0.8.0",
+    "gunicorn>=25.3.0",
+    "markdown>=3.10.2",
+    "misskey-py>=4.1.0",
+    "orjson>=3.11.8",
+    "pillow>=12.2.0",
+    "pyyaml>=6.0.3",
+    "qrcode>=8.2",
+    "requests>=2.33.1",
+]
+
+[tool.uv.sources]
+demoji = { git = "https://github.com/ail-project/demoji" }
