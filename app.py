@@ -41,7 +41,7 @@ except ImportError:
     from yaml import Loader as PyYAMLLoader, Dumper as PyYAMLDumper
 #from modules.mfmrenderer import BasicMFMRenderer
 
-APP_VER = '2024.04.14'
+APP_VER = '2026.04.14'
 
 try:
     gbres = subprocess.check_output(["git", "branch", "--show-current"])
