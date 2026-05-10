@@ -1,0 +1,3 @@
+[submodule "modules/mfmpy"]
+	path = modules/mfmpy
+	url = https://github.com/CyberRex0/mfm.py

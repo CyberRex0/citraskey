@@ -1,0 +1,20 @@
+.mfm-fn {
+    display: inline-block;
+}
+
+.mfm-rotate {
+    transform-origin: center center;
+}
+
+.mfm-fg,
+.mfm-bg {
+    overflow-wrap: anywhere;
+}
+
+.mfm-border-clip {
+    overflow: clip;
+}
+
+.mfm-center {
+    text-align: center;
+}

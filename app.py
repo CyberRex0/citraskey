@@ -33,6 +33,7 @@ import magic
 import sys
 from modules.classes import ConfigT
 from modules.emojistore import EmojiStore
+from modules.mfmrenderer import toHtml
 from werkzeug.middleware.profiler import ProfilerMiddleware
 import yaml
 try:
@@ -41,7 +42,7 @@ except ImportError:
     from yaml import Loader as PyYAMLLoader, Dumper as PyYAMLDumper
 #from modules.mfmrenderer import BasicMFMRenderer
 
-APP_VER = '2026.04.14'
+APP_VER = '2026.05.10'
 
 try:
     gbres = subprocess.check_output(["git", "branch", "--show-current"])
@@ -219,11 +220,12 @@ def mfm_parse(text: str, host: str = None):
     #).render(text)
     #print(f'MFM Parse: {(time.time()-t)*1000:.2f}ms')
     txt = cleantext(text)
-    txt = renderURL(txt)
-    txt = markdown_render(txt)
-    txt = mention2link(txt)
-    txt = convert_tag(txt)
-    txt = emoji_convert(txt, host)
+    #txt = renderURL(txt)
+    #txt = markdown_render(txt)
+    #txt = mention2link(txt)
+    #txt = convert_tag(txt)
+    #txt = emoji_convert(txt, host)
+    txt = markdown_render(txt, host)
     return txt
 
 def unicode_emoji_hex(e):
@@ -288,13 +290,27 @@ def render_markdown_simple(markdown_text: str):
 
     return markdown_text
 
-def markdown_render(text: str):
+def markdown_render(text: str, host: str = None):
     #t = markdown.markdown(text)
     #if t.startswith('<p>'):
     #    t = t[3:]
     #if t.endswith('</p>'):
     #    t = t[:-4]
-    t = render_markdown_simple(text)
+    #t = render_markdown_simple(text)
+    if host is None:
+        try:
+            host = session.get('host')
+        except RuntimeError:
+            host = None
+    t = toHtml(
+        text,
+        emojiStore=emojiStore,
+        emojiUrlFilter=make_mediaproxy_url,
+        unicodeEmojiFilter=lambda x: f'<img loading="lazy" class="emoji-in-text" src="{make_emoji2image_url(x)}">',
+        author_host=host,
+        hashtag_url='/search?type=tags&q=',
+        profile_url='/@'
+    )
     return t
 
 def cleantext(text: str):

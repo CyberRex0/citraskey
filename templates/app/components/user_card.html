@@ -24,7 +24,7 @@
     {% if user['description'] %}
     {% set d = user['description'][:100] + '...' if user['description'].__len__()>100 else user['description'] %}
     {% autoescape False %}
-    <p style="font-size: 0.8em">{{ markdown_render(mention2link(emoji_convert(d, user['host'] or session['host']))) }}</p>
+    <p style="font-size: 0.8em">{{ markdown_render(d, user['host'] or session['host']) }}</p>
     {% endautoescape %}
     {% endif %}
     <p style="font-size: 0.7em;"><strong>{{ intcomma(user['notesCount']) }}</strong> 投稿 {% if user.get('followingVisibility', True) %}&nbsp;<strong>{{ intcomma(user['followingCount']) }}</strong> フォロー{% endif %} {% if user.get('followersVisibility',True) %}&nbsp;<strong>{{ intcomma(user['followersCount']) }}</strong> フォロワー{% endif %}</p>
