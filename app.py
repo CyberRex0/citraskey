@@ -1165,21 +1165,24 @@ def api_post():
     upload_file = request.files.get('image')
     drive_id = None
     
+    payload = {'i': session['misskey_token']}
+
     text = request.form.get('text')
-    if not text:
+    if not upload_file and not text:
         return make_response('text is required', 400)
     
-    # Emoji置き換え
-    text = text.replace('{unicode:WHITE_BLOCK}', '\U00002B1C')
-    text = text.replace('{unicode:YELLOW_BLOCK}', '\U0001F7E8')
-    text = text.replace('{unicode:GREEN_BLOCK}', '\U0001F7E9')
+    if text:
+        payload['text'] = text
+
+        # Emoji置き換え
+        text = text.replace('{unicode:WHITE_BLOCK}', '\U00002B1C')
+        text = text.replace('{unicode:YELLOW_BLOCK}', '\U0001F7E8')
+        text = text.replace('{unicode:GREEN_BLOCK}', '\U0001F7E9')
     
     renote_id = request.form.get('renoteId')
     reply_id = request.form.get('replyId')
     if renote_id and reply_id:
         return make_response('renoteId and replyId cannot be used together', 400)
-
-    payload = {'i': session['misskey_token'], 'text': text}
 
     if renote_id:
         payload['renoteId'] = renote_id
